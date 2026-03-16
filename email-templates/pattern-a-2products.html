@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{NEWSLETTER_TITLE}}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f5f5f5;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f5f5f5;">
+<tr>
+<td align="center" style="padding:20px 0;">
+
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+
+<!--IF:HEADER_IMAGE-->
+<tr>
+<td>
+<img src="{{HEADER_IMAGE}}" alt="{{NEWSLETTER_TITLE}}" width="600" style="display:block;width:100%;height:auto;" />
+</td>
+</tr>
+<!--ENDIF:HEADER_IMAGE-->
+
+<tr>
+<td style="padding:30px 40px 10px;">
+<h1 style="margin:0;font-size:24px;font-weight:bold;color:#333333;font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',Meiryo,sans-serif;">
+{{NEWSLETTER_TITLE}}
+</h1>
+</td>
+</tr>
+
+<!--IF:FEATURE_TITLE-->
+<tr>
+<td style="padding:10px 40px;">
+<h2 style="margin:0;font-size:18px;font-weight:bold;color:#e74c3c;font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',Meiryo,sans-serif;">
+{{FEATURE_TITLE}}
+</h2>
+</td>
+</tr>
+<!--ENDIF:FEATURE_TITLE-->
+
+<!--IF:FEATURE_DESCRIPTION-->
+<tr>
+<td style="padding:5px 40px 20px;">
+<p style="margin:0;font-size:14px;line-height:1.8;color:#666666;font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',Meiryo,sans-serif;">
+{{FEATURE_DESCRIPTION}}
+</p>
+</td>
+</tr>
+<!--ENDIF:FEATURE_DESCRIPTION-->
+
+<!-- Products Row -->
+<tr>
+<td style="padding:10px 30px 30px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+
+<!-- Product 1 -->
+<td width="50%" valign="top" style="padding:0 10px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<!--IF:PRODUCT_1_IMAGE-->
+<tr>
+<td align="center" style="padding-bottom:10px;">
+<a href="{{PRODUCT_1_URL}}" style="text-decoration:none;">
+<img src="{{PRODUCT_1_IMAGE}}" alt="{{PRODUCT_1_NAME}}" width="240" style="display:block;width:100%;max-width:240px;height:auto;border-radius:4px;border:1px solid #eeeeee;" />
+</a>
+</td>
+</tr>
+<!--ENDIF:PRODUCT_1_IMAGE-->
+<!--IF:PRODUCT_1_NAME-->
+<tr>
+<td align="center" style="padding-bottom:10px;">
+<a href="{{PRODUCT_1_URL}}" style="text-decoration:none;color:#333333;font-size:14px;font-weight:bold;font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',Meiryo,sans-serif;">
+{{PRODUCT_1_NAME}}
+</a>
+</td>
+</tr>
+<!--ENDIF:PRODUCT_1_NAME-->
+<tr>
+<td align="center">
+<a href="{{PRODUCT_1_URL}}" style="display:inline-block;padding:8px 24px;background-color:#e74c3c;color:#ffffff;text-decoration:none;border-radius:4px;font-size:13px;font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',Meiryo,sans-serif;">
+詳しく見る
+</a>
+</td>
+</tr>
+</table>
+</td>
+
+<!-- Product 2 -->
+<td width="50%" valign="top" style="padding:0 10px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<!--IF:PRODUCT_2_IMAGE-->
+<tr>
+<td align="center" style="padding-bottom:10px;">
+<a href="{{PRODUCT_2_URL}}" style="text-decoration:none;">
+<img src="{{PRODUCT_2_IMAGE}}" alt="{{PRODUCT_2_NAME}}" width="240" style="display:block;width:100%;max-width:240px;height:auto;border-radius:4px;border:1px solid #eeeeee;" />
+</a>
+</td>
+</tr>
+<!--ENDIF:PRODUCT_2_IMAGE-->
+<!--IF:PRODUCT_2_NAME-->
+<tr>
+<td align="center" style="padding-bottom:10px;">
+<a href="{{PRODUCT_2_URL}}" style="text-decoration:none;color:#333333;font-size:14px;font-weight:bold;font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',Meiryo,sans-serif;">
+{{PRODUCT_2_NAME}}
+</a>
+</td>
+</tr>
+<!--ENDIF:PRODUCT_2_NAME-->
+<tr>
+<td align="center">
+<a href="{{PRODUCT_2_URL}}" style="display:inline-block;padding:8px 24px;background-color:#e74c3c;color:#ffffff;text-decoration:none;border-radius:4px;font-size:13px;font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',Meiryo,sans-serif;">
+詳しく見る
+</a>
+</td>
+</tr>
+</table>
+</td>
+
+</tr>
+</table>
+</td>
+</tr>
+
+<!-- Footer -->
+<tr>
+<td style="padding:20px 40px;background-color:#f8f8f8;border-top:1px solid #eeeeee;">
+<p style="margin:0;font-size:12px;color:#999999;text-align:center;font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',Meiryo,sans-serif;">
+容器なび - yo-ki-navi.com<br />
+テンドール物流株式会社
+</p>
+</td>
+</tr>
+
+</table>
+
+</td>
+</tr>
+</table>
+</body>
+</html>
