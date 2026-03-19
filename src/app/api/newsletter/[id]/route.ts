@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { newsletterSchema } from '@/lib/validators'
+import { deleteFromS3 } from '@/lib/s3'
 import { NextResponse } from 'next/server'
 
 export async function GET(
@@ -108,6 +109,81 @@ export async function DELETE(
     return NextResponse.json({ error: '未認証' }, { status: 401 })
   }
 
+  // 関連する商品のS3画像を削除
+  const { data: products } = await supabase
+    .from('newsletter_products')
+    .select('s3_image_url')
+    .eq('newsletter_id', id)
+
+  // imagesテーブルから関連画像を取得して削除
+  const { data: images } = await supabase
+    .from('images')
+    .select('id, s3_key')
+    .eq('user_id', user.id)
+
+  // newsletter_productsのs3_image_urlからS3キーを抽出して削除
+  const s3DeletePromises: Promise<void>[] = []
+
+  if (products) {
+    for (const p of products) {
+      if (p.s3_image_url) {
+        // URLからS3キーを抽出 (https://bucket.s3.region.amazonaws.com/KEY)
+        try {
+          const url = new URL(p.s3_image_url)
+          const s3Key = url.pathname.slice(1) // 先頭の / を除去
+          if (s3Key) {
+            s3DeletePromises.push(deleteFromS3(s3Key))
+
+            // imagesテーブルからも該当レコードを削除
+            if (images) {
+              const matchedImage = images.find(img => img.s3_key === s3Key)
+              if (matchedImage) {
+                s3DeletePromises.push(
+                  supabase.from('images').delete().eq('id', matchedImage.id).then(() => undefined)
+                )
+              }
+            }
+          }
+        } catch {
+          // URL解析失敗は無視
+        }
+      }
+    }
+  }
+
+  // ヘッダー画像のS3削除
+  const { data: newsletter } = await supabase
+    .from('newsletters')
+    .select('header_image_url')
+    .eq('id', id)
+    .single()
+
+  if (newsletter?.header_image_url) {
+    try {
+      const url = new URL(newsletter.header_image_url)
+      if (url.hostname.includes('s3') && url.hostname.includes('amazonaws.com')) {
+        const s3Key = url.pathname.slice(1)
+        if (s3Key) {
+          s3DeletePromises.push(deleteFromS3(s3Key))
+          if (images) {
+            const matchedImage = images.find(img => img.s3_key === s3Key)
+            if (matchedImage) {
+              s3DeletePromises.push(
+                supabase.from('images').delete().eq('id', matchedImage.id).then(() => undefined)
+              )
+            }
+          }
+        }
+      }
+    } catch {
+      // URL解析失敗は無視
+    }
+  }
+
+  // S3削除を並行実行（失敗してもDB削除は続行）
+  await Promise.allSettled(s3DeletePromises)
+
+  // メルマガ本体を削除（cascade で newsletter_products も削除される）
   const { error } = await supabase
     .from('newsletters')
     .delete()

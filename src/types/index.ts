@@ -6,6 +6,50 @@ export type ImageType = 'product' | 'banner' | 'header' | 'other'
 export type BannerMethod = 'gemini' | 'genspark_prompt' | 'manus' | 'manual'
 export type BannerStatus = 'pending' | 'generated' | 'approved' | 'rejected'
 
+export interface NewsletterDraftData {
+  proposal?: {
+    proposal_summary: string
+    sections: Array<{
+      section_id: string
+      section_name: string
+      section_type: string
+      description: string
+      questions: Array<{
+        question_id: string
+        question: string
+        input_type: string
+        options?: string[]
+        default_value?: string
+        required?: boolean
+        placeholder?: string
+      }>
+    }>
+    product_assignment?: {
+      recommend_products: number[]
+      ranking_products: number[]
+      description: string
+    }
+  }
+  answers?: Record<string, string>
+  formFields?: {
+    useHeader?: boolean
+    headerImageUrl?: string
+    greeting?: string
+    recommendTitle?: string
+    recommendTags?: string[]
+    useSubSection?: boolean
+    sectionType?: string
+    subSectionTitle?: string
+    subSectionTags?: string[]
+    ctaButtonText?: string
+    ctaButtonUrl?: string
+    featureTitle?: string
+    featureDescription?: string
+    directionMemo?: string
+  }
+  contentZone?: Array<{ id: string; image_url: string; link_url: string; text: string }>
+}
+
 export interface Newsletter {
   id: string
   user_id: string
@@ -16,6 +60,7 @@ export interface Newsletter {
   feature_title: string | null
   feature_description: string | null
   html_output: string | null
+  draft_data: NewsletterDraftData | null
   status: NewsletterStatus
   created_at: string
   updated_at: string

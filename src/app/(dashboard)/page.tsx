@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Plus, Mail, FileText } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { NewsletterStatusBadge, FeaturePageStatusBadge } from '@/components/shared/status-badge'
+import { FeaturePageStatusBadge } from '@/components/shared/status-badge'
+import { NewsletterList } from '@/components/newsletter/newsletter-list'
 import type { Newsletter, FeaturePage } from '@/types'
 
 export default async function DashboardPage() {
@@ -46,28 +47,7 @@ export default async function DashboardPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {!newsletters?.length ? (
-            <p className="text-muted-foreground text-sm">メルマガがありません</p>
-          ) : (
-            <div className="space-y-2">
-              {(newsletters as Newsletter[]).map((nl) => (
-                <div key={nl.id} className="flex items-center justify-between rounded-lg border p-3">
-                  <div className="flex items-center gap-3">
-                    <span className="font-medium">{nl.title}</span>
-                    <NewsletterStatusBadge status={nl.status} />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">
-                      {new Date(nl.created_at).toLocaleDateString('ja-JP')}
-                    </span>
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href={`/newsletter/${nl.id}`}>編集</Link>
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <NewsletterList newsletters={(newsletters as Newsletter[]) || []} />
         </CardContent>
       </Card>
 

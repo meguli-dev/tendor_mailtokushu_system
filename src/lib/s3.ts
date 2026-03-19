@@ -37,7 +37,6 @@ export async function uploadToS3(
       Key: s3Key,
       Body: buffer,
       ContentType: contentType,
-      ACL: 'public-read',
     })
   )
 

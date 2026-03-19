@@ -11,7 +11,7 @@ export async function generateBannerImage(params: {
   height: number
   pageContext?: string
 }): Promise<{ imageData: string; mimeType: string }> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' })
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
   const prompt = buildImagePrompt(params)
 
@@ -66,7 +66,7 @@ ${params.pageContext ? `\nコンテキスト: ${params.pageContext}` : ''}
 }
 
 export async function generateText(prompt: string): Promise<string> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' })
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
   const result = await model.generateContent(prompt)
   return result.response.text()
 }

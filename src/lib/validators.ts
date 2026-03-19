@@ -12,6 +12,7 @@ export const newsletterSchema = z.object({
   header_image_url: z.string().url().nullable().optional(),
   feature_title: z.string().max(255).nullable().optional(),
   feature_description: z.string().nullable().optional(),
+  draft_data: z.any().nullable().optional(),
   status: z.enum(['draft', 'exported', 'sent']).default('draft'),
 })
 

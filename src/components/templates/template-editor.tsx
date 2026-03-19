@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
+import { Loader2, Sparkles } from 'lucide-react'
 import { TEMPLATE_VARIABLES } from '@/lib/constants'
 import { toast } from 'sonner'
 import type { NewsletterTemplate } from '@/types'
@@ -29,8 +30,46 @@ export function TemplateEditor({ template }: TemplateEditorProps) {
   const [htmlTemplate, setHtmlTemplate] = useState(template?.html_template || '')
   const [thumbnailUrl, setThumbnailUrl] = useState(template?.thumbnail_url || '')
   const [isActive, setIsActive] = useState(template?.is_active ?? true)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
 
   const isEditing = !!template
+
+  async function handleAnalyze() {
+    if (!htmlTemplate.trim()) {
+      toast.error('HTMLを入力してからAI解析を実行してください')
+      return
+    }
+
+    setIsAnalyzing(true)
+    try {
+      const res = await fetch('/api/template/newsletter/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ html: htmlTemplate }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'AI解析に失敗しました')
+      }
+
+      const result = await res.json()
+
+      // AI解析結果でフォームを更新
+      setHtmlTemplate(result.html_template)
+      setProductCount(result.product_count)
+      setHasRanking(result.has_ranking)
+      if (result.description && !description) {
+        setDescription(result.description)
+      }
+
+      toast.success('AIがHTMLを解析してプレースホルダー付きテンプレートに変換しました')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'AI解析に失敗しました')
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -161,13 +200,37 @@ export function TemplateEditor({ template }: TemplateEditorProps) {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>HTMLテンプレート</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>HTMLテンプレート</CardTitle>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAnalyze}
+                  disabled={isAnalyzing || !htmlTemplate.trim()}
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                      AI解析中...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-1 h-4 w-4" />
+                      AIでテンプレート化
+                    </>
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                完成したメルマガHTMLを貼り付けて「AIでテンプレート化」を押すと、AIが自動的にプレースホルダーを挿入します
+              </p>
             </CardHeader>
             <CardContent>
               <Textarea
                 value={htmlTemplate}
                 onChange={(e) => setHtmlTemplate(e.target.value)}
-                placeholder="<!DOCTYPE html>..."
+                placeholder="完成したメルマガHTMLを貼り付けてください。AIが解析してテンプレートに変換します。"
                 className="font-mono text-sm min-h-[400px]"
                 required
               />
