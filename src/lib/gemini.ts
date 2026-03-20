@@ -12,7 +12,7 @@ export async function generateBannerImage(params: {
   pageContext?: string
 }): Promise<{ imageData: string; mimeType: string }> {
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash-image',
+    model: 'gemini-3-pro-image-preview',
     generationConfig: {
       // @ts-expect-error -- responseModalities is supported in v0.24+ but not yet in types
       responseModalities: ['TEXT', 'IMAGE'],
