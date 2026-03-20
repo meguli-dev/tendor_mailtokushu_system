@@ -5,7 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createContext, useContext, useState, type ReactNode } from 'react'
 
 type SupabaseContext = {
-  supabase: SupabaseClient
+  supabase: SupabaseClient | null
 }
 
 const Context = createContext<SupabaseContext | undefined>(undefined)
@@ -22,8 +22,8 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
 
 export function useSupabase() {
   const context = useContext(Context)
-  if (!context) {
-    throw new Error('useSupabase must be used within a SupabaseProvider')
+  if (!context || !context.supabase) {
+    throw new Error('useSupabase must be used within a SupabaseProvider with valid env vars')
   }
   return context.supabase
 }
