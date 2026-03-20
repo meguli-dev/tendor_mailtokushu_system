@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { generateBannerImage } from '@/lib/gemini'
 import { bannerGenerateSchema } from '@/lib/validators'
+import { uploadToS3 } from '@/lib/s3'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
@@ -18,13 +19,33 @@ export async function POST(request: Request) {
     }
 
     const result = await generateBannerImage({
-      templatePattern: parsed.data.template_pattern || 'default',
-      productImages: parsed.data.product_images,
       mainText: parsed.data.main_text,
       subText: parsed.data.sub_text,
       width: parsed.data.width,
       height: parsed.data.height,
+      productImages: parsed.data.product_images,
+      referenceImageUrl: parsed.data.reference_image_url,
       pageContext: parsed.data.page_context,
+    })
+
+    // Upload generated image to S3
+    const ext = result.mimeType === 'image/png' ? 'png' : 'jpg'
+    const buffer = Buffer.from(result.imageData, 'base64')
+    const { s3Key, s3Url } = await uploadToS3(
+      buffer,
+      `banner-generated.${ext}`,
+      result.mimeType,
+      'banner'
+    )
+
+    // Save image record
+    await supabase.from('images').insert({
+      user_id: user.id,
+      s3_key: s3Key,
+      s3_url: s3Url,
+      image_type: 'banner',
+      file_name: `banner-generated.${ext}`,
+      file_size: buffer.length,
     })
 
     // Log generation
@@ -33,10 +54,11 @@ export async function POST(request: Request) {
       method: 'gemini',
       prompt: JSON.stringify(parsed.data),
       input_params: parsed.data,
+      result_image_url: s3Url,
       status: 'generated',
     })
 
-    return NextResponse.json(result)
+    return NextResponse.json({ s3Url, s3Key, mimeType: result.mimeType })
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : '画像生成に失敗しました' },

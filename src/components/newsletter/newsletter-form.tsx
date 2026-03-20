@@ -14,6 +14,7 @@ import { ProductInput, type ProductData } from './product-input'
 import { useNewsletterTemplates } from '@/hooks/use-templates'
 import { useCreateNewsletter, useUpdateNewsletter } from '@/hooks/use-newsletters'
 import { CopyButton } from '@/components/shared/copy-button'
+import { BannerGenerateDialog } from './banner-generate-dialog'
 import { toast } from 'sonner'
 import type { NewsletterWithProducts } from '@/types'
 
@@ -184,6 +185,7 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedHtml, setGeneratedHtml] = useState(newsletter?.html_output || '')
   const [newsletterId, setNewsletterId] = useState(newsletter?.id || '')
+  const [bannerDialogOpen, setBannerDialogOpen] = useState(false)
   const selectedTemplate = templates?.find((t) => t.id === templateId)
 
   function updateProduct(index: number, data: Partial<ProductData>) {
@@ -1398,6 +1400,10 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
                 )}
                 再生成
               </Button>
+              <Button variant="outline" onClick={() => setBannerDialogOpen(true)}>
+                <ImageIcon className="mr-1 h-4 w-4" />
+                バナー生成
+              </Button>
             </div>
           </div>
 
@@ -1448,6 +1454,14 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
               </ol>
             </CardContent>
           </Card>
+
+          <BannerGenerateDialog
+            open={bannerDialogOpen}
+            onOpenChange={setBannerDialogOpen}
+            newsletterId={newsletterId || null}
+            title={title}
+            products={products}
+          />
         </div>
       )}
     </div>

@@ -62,13 +62,14 @@ export const imageUploadSchema = z.object({
 
 export const bannerGenerateSchema = z.object({
   template_pattern: z.string().optional(),
-  product_images: z.array(z.string().url()),
+  product_images: z.array(z.string().url()).default([]),
   main_text: z.string().min(1),
   sub_text: z.string().optional(),
   width: z.number().int().default(800),
   height: z.number().int().default(400),
   page_context: z.string().optional(),
   reference_image_url: z.string().url().optional(),
+  newsletter_id: z.string().uuid().optional(),
 })
 
 export type LoginInput = z.infer<typeof loginSchema>
