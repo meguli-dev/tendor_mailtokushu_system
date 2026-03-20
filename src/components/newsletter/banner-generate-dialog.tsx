@@ -39,7 +39,7 @@ export function BannerGenerateDialog({
 }: BannerGenerateDialogProps) {
   const [referenceImageUrl, setReferenceImageUrl] = useState('')
   const [width, setWidth] = useState(800)
-  const [height, setHeight] = useState(400)
+  const [height, setHeight] = useState(800)
   const [mainText, setMainText] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedUrl, setGeneratedUrl] = useState('')
@@ -130,22 +130,43 @@ export function BannerGenerateDialog({
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>幅 (px)</Label>
-              <Input
-                type="number"
-                value={width}
-                onChange={(e) => setWidth(parseInt(e.target.value) || 800)}
-              />
+          <div className="space-y-2">
+            <Label>サイズ</Label>
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { label: '正方形', w: 800, h: 800 },
+                { label: '横長バナー', w: 800, h: 400 },
+                { label: 'ワイド', w: 1200, h: 628 },
+                { label: '縦長', w: 600, h: 800 },
+              ].map((preset) => (
+                <Button
+                  key={preset.label}
+                  type="button"
+                  variant={width === preset.w && height === preset.h ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => { setWidth(preset.w); setHeight(preset.h) }}
+                >
+                  {preset.label} ({preset.w}x{preset.h})
+                </Button>
+              ))}
             </div>
-            <div className="space-y-2">
-              <Label>高さ (px)</Label>
-              <Input
-                type="number"
-                value={height}
-                onChange={(e) => setHeight(parseInt(e.target.value) || 400)}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">幅 (px)</Label>
+                <Input
+                  type="number"
+                  value={width}
+                  onChange={(e) => setWidth(parseInt(e.target.value) || 800)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">高さ (px)</Label>
+                <Input
+                  type="number"
+                  value={height}
+                  onChange={(e) => setHeight(parseInt(e.target.value) || 800)}
+                />
+              </div>
             </div>
           </div>
 
