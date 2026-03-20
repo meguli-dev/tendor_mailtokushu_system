@@ -27,7 +27,15 @@ export function useNewsletter(id: string) {
 export function useCreateNewsletter() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (data: { title: string; template_id?: string | null }) => {
+    mutationFn: async (data: {
+      title: string
+      template_id?: string | null
+      has_header_image?: boolean
+      header_image_url?: string | null
+      feature_title?: string | null
+      feature_description?: string | null
+      status?: 'draft' | 'exported' | 'sent'
+    }) => {
       const res = await fetch('/api/newsletter', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

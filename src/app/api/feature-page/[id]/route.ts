@@ -56,7 +56,7 @@ export async function PUT(
 
   const parsed = featurePageSchema.partial().safeParse(pageData)
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 })
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
 
   const { data, error } = await supabase

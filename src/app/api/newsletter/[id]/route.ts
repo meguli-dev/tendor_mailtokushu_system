@@ -59,7 +59,7 @@ export async function PUT(
 
   const parsed = newsletterSchema.partial().safeParse(newsletterData)
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 })
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
 
   const { data, error } = await supabase
@@ -139,7 +139,7 @@ export async function DELETE(
               const matchedImage = images.find(img => img.s3_key === s3Key)
               if (matchedImage) {
                 s3DeletePromises.push(
-                  supabase.from('images').delete().eq('id', matchedImage.id).then(() => undefined)
+                  supabase.from('images').delete().eq('id', matchedImage.id).then(() => { /* void */ }) as Promise<void>
                 )
               }
             }
@@ -169,7 +169,7 @@ export async function DELETE(
             const matchedImage = images.find(img => img.s3_key === s3Key)
             if (matchedImage) {
               s3DeletePromises.push(
-                supabase.from('images').delete().eq('id', matchedImage.id).then(() => undefined)
+                supabase.from('images').delete().eq('id', matchedImage.id).then(() => { /* void */ }) as Promise<void>
               )
             }
           }
