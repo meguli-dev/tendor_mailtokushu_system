@@ -1,4 +1,5 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { v4 as uuidv4 } from 'uuid'
 import { S3_PATHS } from './constants'
 import type { ImageType } from '@/types'
@@ -28,7 +29,6 @@ export async function uploadToS3(
   imageType: ImageType = 'other'
 ): Promise<{ s3Key: string; s3Url: string }> {
   const path = getS3Path(imageType)
-  const ext = filename.split('.').pop() || 'jpg'
   const s3Key = `${path}/${uuidv4()}_${sanitizeFilename(filename)}`
 
   await s3Client.send(
@@ -40,9 +40,18 @@ export async function uploadToS3(
     })
   )
 
-  const s3Url = `https://${BUCKET_NAME}.s3.${process.env.AWS_REGION || 'ap-northeast-1'}.amazonaws.com/${s3Key}`
+  // Generate a presigned URL (valid for 7 days)
+  const s3Url = await getPresignedUrl(s3Key)
 
   return { s3Key, s3Url }
+}
+
+export async function getPresignedUrl(s3Key: string, expiresIn = 604800): Promise<string> {
+  const command = new GetObjectCommand({
+    Bucket: BUCKET_NAME,
+    Key: s3Key,
+  })
+  return getSignedUrl(s3Client, command, { expiresIn })
 }
 
 export async function uploadFromUrl(
