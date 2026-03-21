@@ -110,6 +110,52 @@ ${params.pageContext ? `【コンテキスト】${params.pageContext}` : ''}
 画像のみを生成してください。`
 }
 
+export async function editBannerImage(params: {
+  baseImageUrl: string
+  editInstruction: string
+}): Promise<{ imageData: string; mimeType: string }> {
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-3-pro-image-preview',
+    generationConfig: {
+      // @ts-expect-error -- responseModalities is supported in v0.24+ but not yet in types
+      responseModalities: ['TEXT', 'IMAGE'],
+    },
+  })
+
+  // Fetch the base image
+  const basePart = await fetchImageAsPart(params.baseImageUrl)
+
+  const parts: Array<{ text: string } | { inlineData: { data: string; mimeType: string } }> = [
+    { text: `以下の画像を編集してください。元の画像のデザイン・レイアウト・色合いを忠実に保持したまま、指定された修正点のみを変更してください。
+
+【修正指示】
+${params.editInstruction}
+
+【重要】
+- 元画像の構図やスタイルは維持すること
+- 指示された箇所以外は変更しないこと
+- 画像のみを出力すること` },
+    basePart,
+  ]
+
+  const result = await model.generateContent(parts)
+  const response = result.response
+
+  const candidates = response.candidates
+  if (candidates && candidates.length > 0) {
+    for (const part of candidates[0].content.parts) {
+      if (part.inlineData) {
+        return {
+          imageData: part.inlineData.data,
+          mimeType: part.inlineData.mimeType || 'image/png',
+        }
+      }
+    }
+  }
+
+  throw new Error('画像の編集に失敗しました。修正指示を変えて再試行してください。')
+}
+
 export async function generateText(prompt: string): Promise<string> {
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
   const result = await model.generateContent(prompt)

@@ -12,7 +12,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2, Download, ImageIcon, Check } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+import { Loader2, Download, ImageIcon, Check, PenLine, RotateCcw } from 'lucide-react'
 import { CopyButton } from '@/components/shared/copy-button'
 import { toast } from 'sonner'
 
@@ -39,6 +40,8 @@ interface SelectableProduct {
   source: string
 }
 
+const MAX_EDITS = 3
+
 export function BannerGenerateDialog({
   open,
   onOpenChange,
@@ -54,6 +57,11 @@ export function BannerGenerateDialog({
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedUrl, setGeneratedUrl] = useState('')
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set())
+
+  // Edit state
+  const [editCount, setEditCount] = useState(0)
+  const [editInstruction, setEditInstruction] = useState('')
+  const [isEditing, setIsEditing] = useState(false)
 
   // Build selectable product list from both sources
   const allProducts: SelectableProduct[] = []
@@ -80,10 +88,13 @@ export function BannerGenerateDialog({
     }
   })
 
-  // Initialize selection when dialog opens
+  // Reset when dialog opens
   useEffect(() => {
     if (open) {
       setSelectedProductIds(new Set())
+      setEditCount(0)
+      setEditInstruction('')
+      setGeneratedUrl('')
     }
   }, [open])
 
@@ -104,6 +115,8 @@ export function BannerGenerateDialog({
   async function handleGenerate() {
     setIsGenerating(true)
     setGeneratedUrl('')
+    setEditCount(0)
+    setEditInstruction('')
     try {
       const selectedImages = allProducts
         .filter((p) => selectedProductIds.has(p.id))
@@ -143,11 +156,46 @@ export function BannerGenerateDialog({
     }
   }
 
+  async function handleEdit() {
+    if (!editInstruction.trim()) {
+      toast.error('修正指示を入力してください')
+      return
+    }
+    setIsEditing(true)
+    try {
+      const res = await fetch('/api/banner/edit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          base_image_url: generatedUrl,
+          edit_instruction: editInstruction.trim(),
+        }),
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error)
+      }
+
+      const data = await res.json()
+      setGeneratedUrl(data.s3Url)
+      setEditCount((prev) => prev + 1)
+      setEditInstruction('')
+      toast.success(`編集完了（${editCount + 1}/${MAX_EDITS}回）`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '画像編集に失敗しました')
+    } finally {
+      setIsEditing(false)
+    }
+  }
+
   function handleClose(value: boolean) {
-    if (!isGenerating) {
+    if (!isGenerating && !isEditing) {
       onOpenChange(value)
     }
   }
+
+  const isProcessing = isGenerating || isEditing
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -163,158 +211,231 @@ export function BannerGenerateDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <div className="space-y-2">
-            <Label>メインテキスト</Label>
-            <Input
-              value={mainText}
-              onChange={(e) => setMainText(e.target.value)}
-              placeholder={title}
-            />
-            <p className="text-xs text-muted-foreground">
-              空欄の場合、特集テーマ「{title}」が使用されます
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label>参考画像URL（任意）</Label>
-            <Input
-              value={referenceImageUrl}
-              onChange={(e) => setReferenceImageUrl(e.target.value)}
-              placeholder="https://... 過去のバナー画像など"
-            />
-            <p className="text-xs text-muted-foreground">
-              スタイルや雰囲気の参考にする画像のURLを指定できます
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label>サイズ</Label>
-            <div className="flex gap-2 flex-wrap">
-              {[
-                { label: '正方形', w: 800, h: 800 },
-                { label: '横長バナー', w: 800, h: 400 },
-                { label: 'ワイド', w: 1200, h: 628 },
-                { label: '縦長', w: 600, h: 800 },
-              ].map((preset) => (
-                <Button
-                  key={preset.label}
-                  type="button"
-                  variant={width === preset.w && height === preset.h ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => { setWidth(preset.w); setHeight(preset.h) }}
-                >
-                  {preset.label} ({preset.w}x{preset.h})
-                </Button>
-              ))}
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">幅 (px)</Label>
+          {/* Generation settings - collapse after generation */}
+          {!generatedUrl && (
+            <>
+              <div className="space-y-2">
+                <Label>メインテキスト</Label>
                 <Input
-                  type="number"
-                  value={width}
-                  onChange={(e) => setWidth(parseInt(e.target.value) || 800)}
+                  value={mainText}
+                  onChange={(e) => setMainText(e.target.value)}
+                  placeholder={title}
                 />
+                <p className="text-xs text-muted-foreground">
+                  空欄の場合、特集テーマ「{title}」が使用されます
+                </p>
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">高さ (px)</Label>
+
+              <div className="space-y-2">
+                <Label>参考画像URL（任意）</Label>
                 <Input
-                  type="number"
-                  value={height}
-                  onChange={(e) => setHeight(parseInt(e.target.value) || 800)}
+                  value={referenceImageUrl}
+                  onChange={(e) => setReferenceImageUrl(e.target.value)}
+                  placeholder="https://... 過去のバナー画像など"
                 />
+                <p className="text-xs text-muted-foreground">
+                  スタイルや雰囲気の参考にする画像のURLを指定できます
+                </p>
               </div>
-            </div>
-          </div>
 
-          {/* Product image selection */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>バナーに入れる商品画像（最大4枚）</Label>
-              <span className="text-xs text-muted-foreground">
-                {selectedProductIds.size}/4 選択中
-              </span>
-            </div>
-
-            {allProducts.length > 0 ? (
-              <div className="grid grid-cols-2 gap-2">
-                {allProducts.map((p) => {
-                  const isSelected = selectedProductIds.has(p.id)
-                  return (
-                    <button
-                      key={p.id}
+              <div className="space-y-2">
+                <Label>サイズ</Label>
+                <div className="flex gap-2 flex-wrap">
+                  {[
+                    { label: '正方形', w: 800, h: 800 },
+                    { label: '横長バナー', w: 800, h: 400 },
+                    { label: 'ワイド', w: 1200, h: 628 },
+                    { label: '縦長', w: 600, h: 800 },
+                  ].map((preset) => (
+                    <Button
+                      key={preset.label}
                       type="button"
-                      onClick={() => toggleProduct(p.id)}
-                      className={`relative flex items-center gap-2 rounded-lg border p-2 text-left transition-colors cursor-pointer ${
-                        isSelected
-                          ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                          : 'border-border hover:bg-muted/50'
-                      }`}
+                      variant={width === preset.w && height === preset.h ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => { setWidth(preset.w); setHeight(preset.h) }}
                     >
-                      <img
-                        src={p.imageUrl}
-                        alt={p.name}
-                        className="h-12 w-12 rounded object-cover flex-shrink-0"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium truncate">{p.name}</p>
-                        <p className="text-[10px] text-muted-foreground">{p.source}</p>
-                      </div>
-                      {isSelected && (
-                        <div className="absolute top-1 right-1 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
-                          <Check className="h-3 w-3 text-primary-foreground" />
-                        </div>
-                      )}
-                    </button>
-                  )
-                })}
+                      {preset.label} ({preset.w}x{preset.h})
+                    </Button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">幅 (px)</Label>
+                    <Input
+                      type="number"
+                      value={width}
+                      onChange={(e) => setWidth(parseInt(e.target.value) || 800)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">高さ (px)</Label>
+                    <Input
+                      type="number"
+                      value={height}
+                      onChange={(e) => setHeight(parseInt(e.target.value) || 800)}
+                    />
+                  </div>
+                </div>
               </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">商品画像がありません</p>
-            )}
 
-            <p className="text-xs text-muted-foreground">
-              選択しない場合、テキストのみのバナーが生成されます
-            </p>
-          </div>
+              {/* Product image selection */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>バナーに入れる商品画像（最大4枚）</Label>
+                  <span className="text-xs text-muted-foreground">
+                    {selectedProductIds.size}/4 選択中
+                  </span>
+                </div>
 
+                {allProducts.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {allProducts.map((p) => {
+                      const isSelected = selectedProductIds.has(p.id)
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => toggleProduct(p.id)}
+                          className={`relative flex items-center gap-2 rounded-lg border p-2 text-left transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                              : 'border-border hover:bg-muted/50'
+                          }`}
+                        >
+                          <img
+                            src={p.imageUrl}
+                            alt={p.name}
+                            className="h-12 w-12 rounded object-cover flex-shrink-0"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium truncate">{p.name}</p>
+                            <p className="text-[10px] text-muted-foreground">{p.source}</p>
+                          </div>
+                          {isSelected && (
+                            <div className="absolute top-1 right-1 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                              <Check className="h-3 w-3 text-primary-foreground" />
+                            </div>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">商品画像がありません</p>
+                )}
+
+                <p className="text-xs text-muted-foreground">
+                  選択しない場合、テキストのみのバナーが生成されます
+                </p>
+              </div>
+            </>
+          )}
+
+          {/* Generated result + edit UI */}
           {generatedUrl && (
-            <div className="space-y-3 rounded-lg border p-3">
-              <Label>生成結果</Label>
-              <img
-                src={generatedUrl}
-                alt="生成されたバナー"
-                className="w-full rounded border"
-              />
-              <div className="flex gap-2">
-                <CopyButton text={generatedUrl} label="URLをコピー" />
-                <Button variant="outline" size="sm" asChild>
-                  <a href={generatedUrl} download="banner.png" target="_blank" rel="noopener noreferrer">
-                    <Download className="mr-1 h-4 w-4" />
-                    ダウンロード
-                  </a>
-                </Button>
+            <div className="space-y-4">
+              <div className="space-y-3 rounded-lg border p-3">
+                <div className="flex items-center justify-between">
+                  <Label>生成結果</Label>
+                  {editCount > 0 && (
+                    <span className="text-xs text-muted-foreground">編集 {editCount}/{MAX_EDITS}回</span>
+                  )}
+                </div>
+                <img
+                  src={generatedUrl}
+                  alt="生成されたバナー"
+                  className="w-full rounded border"
+                />
+                <div className="flex gap-2">
+                  <CopyButton text={generatedUrl} label="URLをコピー" />
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={generatedUrl} download="banner.png" target="_blank" rel="noopener noreferrer">
+                      <Download className="mr-1 h-4 w-4" />
+                      ダウンロード
+                    </a>
+                  </Button>
+                </div>
               </div>
+
+              {/* Edit section */}
+              {editCount < MAX_EDITS && (
+                <div className="space-y-3 rounded-lg border border-dashed p-3">
+                  <Label className="flex items-center gap-1">
+                    <PenLine className="h-4 w-4" />
+                    画像を編集（残り{MAX_EDITS - editCount}回）
+                  </Label>
+                  <Textarea
+                    value={editInstruction}
+                    onChange={(e) => setEditInstruction(e.target.value)}
+                    placeholder="例: テキストをもっと大きくして、背景をもう少し明るくして"
+                    rows={2}
+                    disabled={isProcessing}
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleEdit}
+                      disabled={isProcessing || !editInstruction.trim()}
+                    >
+                      {isEditing ? (
+                        <>
+                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                          編集中...
+                        </>
+                      ) : (
+                        <>
+                          <PenLine className="mr-1 h-4 w-4" />
+                          この指示で編集
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {editCount >= MAX_EDITS && (
+                <p className="text-xs text-muted-foreground text-center">
+                  編集回数の上限（{MAX_EDITS}回）に達しました
+                </p>
+              )}
             </div>
           )}
         </div>
 
         <DialogFooter>
-          <Button
-            onClick={handleGenerate}
-            disabled={isGenerating}
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                生成中...（30秒ほどかかります）
-              </>
-            ) : generatedUrl ? (
-              '再生成'
-            ) : (
-              'バナーを生成'
-            )}
-          </Button>
+          {generatedUrl ? (
+            <Button
+              variant="outline"
+              onClick={handleGenerate}
+              disabled={isProcessing}
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  生成中...
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="mr-1 h-4 w-4" />
+                  最初から再生成
+                </>
+              )}
+            </Button>
+          ) : (
+            <Button
+              onClick={handleGenerate}
+              disabled={isProcessing}
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  生成中...（30秒ほどかかります）
+                </>
+              ) : (
+                'バナーを生成'
+              )}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
