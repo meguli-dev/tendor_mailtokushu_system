@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2, Download, ImageIcon } from 'lucide-react'
+import { Loader2, Download, ImageIcon, Check } from 'lucide-react'
 import { CopyButton } from '@/components/shared/copy-button'
 import { toast } from 'sonner'
 
@@ -28,6 +28,14 @@ interface BannerGenerateDialogProps {
   newsletterId: string | null
   title: string
   products: ProductData[]
+  subSectionProducts?: ProductData[]
+}
+
+interface SelectableProduct {
+  id: string
+  name: string
+  imageUrl: string
+  source: string
 }
 
 export function BannerGenerateDialog({
@@ -36,6 +44,7 @@ export function BannerGenerateDialog({
   newsletterId,
   title,
   products,
+  subSectionProducts = [],
 }: BannerGenerateDialogProps) {
   const [referenceImageUrl, setReferenceImageUrl] = useState('')
   const [width, setWidth] = useState(800)
@@ -43,28 +52,73 @@ export function BannerGenerateDialog({
   const [mainText, setMainText] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedUrl, setGeneratedUrl] = useState('')
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set())
+
+  // Build selectable product list from both sources
+  const allProducts: SelectableProduct[] = []
+  products.forEach((p, i) => {
+    if (p.s3_image_url) {
+      allProducts.push({
+        id: `main-${i}`,
+        name: p.product_name || `おすすめ商品${i + 1}`,
+        imageUrl: p.s3_image_url,
+        source: 'おすすめ',
+      })
+    }
+  })
+  subSectionProducts.forEach((p, i) => {
+    if (p.s3_image_url) {
+      allProducts.push({
+        id: `sub-${i}`,
+        name: p.product_name || `ランキング/紹介${i + 1}`,
+        imageUrl: p.s3_image_url,
+        source: 'ランキング/紹介',
+      })
+    }
+  })
+
+  // Initialize selection when dialog opens
+  useEffect(() => {
+    if (open) {
+      setSelectedProductIds(new Set())
+    }
+  }, [open])
+
+  function toggleProduct(id: string) {
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else if (next.size < 4) {
+        next.add(id)
+      } else {
+        toast.error('商品画像は最大4枚まで選択できます')
+      }
+      return next
+    })
+  }
 
   async function handleGenerate() {
     setIsGenerating(true)
     setGeneratedUrl('')
     try {
-      const productImages = products
-        .map((p) => p.s3_image_url)
-        .filter((url): url is string => !!url)
+      const selectedImages = allProducts
+        .filter((p) => selectedProductIds.has(p.id))
+        .map((p) => p.imageUrl)
 
-      const productNames = products
-        .map((p) => p.product_name)
-        .filter((name): name is string => !!name)
+      const selectedNames = allProducts
+        .filter((p) => selectedProductIds.has(p.id))
+        .map((p) => p.name)
 
       const res = await fetch('/api/banner/generate-gemini', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           main_text: mainText || title,
-          sub_text: productNames.length > 0 ? productNames.join('、') : undefined,
+          sub_text: selectedNames.length > 0 ? selectedNames.join('、') : undefined,
           width,
           height,
-          product_images: productImages,
+          product_images: selectedImages,
           reference_image_url: referenceImageUrl || undefined,
           page_context: `メルマガ特集: ${title}`,
           newsletter_id: newsletterId || undefined,
@@ -170,28 +224,56 @@ export function BannerGenerateDialog({
             </div>
           </div>
 
-          {products.filter((p) => p.s3_image_url).length > 0 && (
-            <div className="space-y-2">
-              <Label>使用する商品画像</Label>
-              <div className="flex gap-2 flex-wrap">
-                {products
-                  .filter((p) => p.s3_image_url)
-                  .map((p, i) => (
-                    <div key={i} className="flex items-center gap-1 text-xs bg-muted rounded px-2 py-1">
-                      <img
-                        src={p.s3_image_url!}
-                        alt={p.product_name || '商品'}
-                        className="h-6 w-6 object-cover rounded"
-                      />
-                      <span className="max-w-[100px] truncate">{p.product_name || `商品${i + 1}`}</span>
-                    </div>
-                  ))}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                登録済みの商品画像がバナーに使用されます（最大4枚）
-              </p>
+          {/* Product image selection */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>バナーに入れる商品画像（最大4枚）</Label>
+              <span className="text-xs text-muted-foreground">
+                {selectedProductIds.size}/4 選択中
+              </span>
             </div>
-          )}
+
+            {allProducts.length > 0 ? (
+              <div className="grid grid-cols-2 gap-2">
+                {allProducts.map((p) => {
+                  const isSelected = selectedProductIds.has(p.id)
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => toggleProduct(p.id)}
+                      className={`relative flex items-center gap-2 rounded-lg border p-2 text-left transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                          : 'border-border hover:bg-muted/50'
+                      }`}
+                    >
+                      <img
+                        src={p.imageUrl}
+                        alt={p.name}
+                        className="h-12 w-12 rounded object-cover flex-shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium truncate">{p.name}</p>
+                        <p className="text-[10px] text-muted-foreground">{p.source}</p>
+                      </div>
+                      {isSelected && (
+                        <div className="absolute top-1 right-1 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                          <Check className="h-3 w-3 text-primary-foreground" />
+                        </div>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">商品画像がありません</p>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              選択しない場合、テキストのみのバナーが生成されます
+            </p>
+          </div>
 
           {generatedUrl && (
             <div className="space-y-3 rounded-lg border p-3">

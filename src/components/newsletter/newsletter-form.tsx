@@ -1461,6 +1461,7 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
             newsletterId={newsletterId || null}
             title={title}
             products={products}
+            subSectionProducts={subSectionProducts}
           />
         </div>
       )}
