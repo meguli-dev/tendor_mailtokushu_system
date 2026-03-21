@@ -19,6 +19,7 @@ import { toast } from 'sonner'
 interface ProductData {
   product_url: string
   product_name?: string | null
+  product_image_url?: string | null
   s3_image_url?: string | null
 }
 
@@ -57,21 +58,23 @@ export function BannerGenerateDialog({
   // Build selectable product list from both sources
   const allProducts: SelectableProduct[] = []
   products.forEach((p, i) => {
-    if (p.s3_image_url) {
+    const imageUrl = p.s3_image_url || p.product_image_url
+    if (imageUrl) {
       allProducts.push({
         id: `main-${i}`,
         name: p.product_name || `おすすめ商品${i + 1}`,
-        imageUrl: p.s3_image_url,
+        imageUrl,
         source: 'おすすめ',
       })
     }
   })
   subSectionProducts.forEach((p, i) => {
-    if (p.s3_image_url) {
+    const imageUrl = p.s3_image_url || p.product_image_url
+    if (imageUrl) {
       allProducts.push({
         id: `sub-${i}`,
         name: p.product_name || `ランキング/紹介${i + 1}`,
-        imageUrl: p.s3_image_url,
+        imageUrl,
         source: 'ランキング/紹介',
       })
     }
