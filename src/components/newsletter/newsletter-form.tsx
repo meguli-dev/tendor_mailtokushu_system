@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -84,6 +85,7 @@ const DIRECTION_EXAMPLES = [
 
 export function NewsletterForm({ newsletter }: NewsletterFormProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { data: templates, isLoading: templatesLoading } = useNewsletterTemplates()
   const createMutation = useCreateNewsletter()
   const updateMutation = useUpdateNewsletter()
@@ -104,18 +106,21 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
   const [title, setTitle] = useState(newsletter?.title || '')
   const [templateId, setTemplateId] = useState(newsletter?.template_id || '')
   const [directionMemo, setDirectionMemo] = useState(draft?.formFields?.directionMemo || '')
-  const [products, setProducts] = useState<ProductData[]>(
-    newsletter?.products?.length
-      ? newsletter.products.map((p) => ({
-          product_url: p.product_url,
-          product_name: p.product_name,
-          product_image_url: p.product_image_url,
-          s3_image_url: p.s3_image_url,
-          sort_order: p.sort_order,
-          is_ranking: p.is_ranking,
-          rank_position: p.rank_position,
-        }))
-      : [{ ...emptyProduct }]
+  const [products, setProducts] = useState<ProductData[]>(() => {
+    if (!newsletter?.products?.length) return [{ ...emptyProduct }]
+    const recommendProducts = newsletter.products
+      .filter(p => !p.is_ranking)
+      .map((p) => ({
+        product_url: p.product_url,
+        product_name: p.product_name,
+        product_image_url: p.product_image_url,
+        s3_image_url: p.s3_image_url,
+        sort_order: p.sort_order,
+        is_ranking: p.is_ranking,
+        rank_position: p.rank_position,
+      }))
+    return recommendProducts.length > 0 ? recommendProducts : [{ ...emptyProduct }]
+  }
   )
   const [contentZone, setContentZone] = useState<ContentZoneBlock[]>(
     draft?.contentZone || []
@@ -144,6 +149,7 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
   const [headerImageUrl, setHeaderImageUrl] = useState(
     draft?.formFields?.headerImageUrl || newsletter?.header_image_url || ''
   )
+  const [subject, setSubject] = useState(draft?.formFields?.subject || '')
   const [greeting, setGreeting] = useState(draft?.formFields?.greeting || '')
   const [recommendTitle, setRecommendTitle] = useState(draft?.formFields?.recommendTitle || '')
   const [recommendTags, setRecommendTags] = useState<string[]>(draft?.formFields?.recommendTags || [])
@@ -186,7 +192,37 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
   const [generatedHtml, setGeneratedHtml] = useState(newsletter?.html_output || '')
   const [newsletterId, setNewsletterId] = useState(newsletter?.id || '')
   const [bannerDialogOpen, setBannerDialogOpen] = useState(false)
+  const [editableHtml, setEditableHtml] = useState('')
+  const previewIframeRef = useRef<HTMLIFrameElement>(null)
   const selectedTemplate = templates?.find((t) => t.id === templateId)
+
+  // generatedHtml が更新されたら editableHtml と プレビューも同期
+  useEffect(() => {
+    if (generatedHtml) {
+      setEditableHtml(generatedHtml)
+      updatePreviewIframe(generatedHtml)
+    }
+  }, [generatedHtml])
+
+  function updatePreviewIframe(html: string) {
+    setTimeout(() => {
+      const iframe = previewIframeRef.current
+      if (iframe) {
+        const doc = iframe.contentDocument
+        if (doc) {
+          doc.open()
+          doc.write(html)
+          doc.close()
+        }
+      }
+    }, 50)
+  }
+
+  function handleApplyHtmlEdit() {
+    setGeneratedHtml(editableHtml)
+    updatePreviewIframe(editableHtml)
+    toast.success('プレビューに反映しました')
+  }
 
   function updateProduct(index: number, data: Partial<ProductData>) {
     setProducts((prev) =>
@@ -213,26 +249,23 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
   }
 
   function addSubSectionProduct() {
-    const max = sectionType === 'ranking' ? 4 : 2
-    if (subSectionProducts.length >= max) return
+    if (subSectionProducts.length >= MAX_PRODUCTS) return
     setSubSectionProducts((prev) => [...prev, { ...emptyProduct, sort_order: prev.length }])
   }
 
   function handleToggleSubSection(enabled: boolean) {
     setUseSubSection(enabled)
     if (enabled && subSectionProducts.length === 0) {
-      const count = sectionType === 'ranking' ? 4 : 2
       setSubSectionProducts(
-        Array.from({ length: count }, (_, i) => ({ ...emptyProduct, sort_order: i }))
+        Array.from({ length: MAX_PRODUCTS }, (_, i) => ({ ...emptyProduct, sort_order: i }))
       )
     }
   }
 
   function handleSectionTypeChange(type: SectionType) {
     setSectionType(type)
-    const count = type === 'ranking' ? 4 : 2
     setSubSectionProducts(
-      Array.from({ length: count }, (_, i) => ({ ...emptyProduct, sort_order: i }))
+      Array.from({ length: MAX_PRODUCTS }, (_, i) => ({ ...emptyProduct, sort_order: i }))
     )
   }
 
@@ -256,7 +289,13 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
   // section_type → フォームフィールドへのマッピング
   // header_imageはアドバイスのみ（URLは提案しない）なのでフォームに反映しない
   function applyAnswerToForm(sectionType: string, questionId: string, value: string) {
+    console.log('[applyAnswerToForm]', { sectionType, questionId, value })
     switch (sectionType) {
+      case 'newsletter_title':
+      case 'title':
+      case 'feature':
+        setSubject(value)
+        break
       case 'greeting':
         setGreeting(value)
         break
@@ -278,19 +317,17 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
           setCtaButtonUrl(value)
         }
         break
-      case 'feature_title':
-      case 'feature':
-        if (questionId.includes('description') || questionId.includes('desc')) {
-          setFeatureDescription(value)
-        } else {
-          setFeatureTitle(value)
-        }
-        break
       case 'ranking':
         if (questionId.includes('title')) {
           setSubSectionTitle(value)
           setUseSubSection(true)
           setSectionType('ranking')
+        }
+        break
+      default:
+        // AIが想定外のsection_typeでタイトルを返した場合のフォールバック
+        if (sectionType.includes('title') && !sectionType.includes('recommend')) {
+          setSubject(value)
         }
         break
     }
@@ -318,6 +355,7 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
       proposal: proposalData,
       answers: answersData,
       formFields: {
+        subject,
         useHeader,
         headerImageUrl,
         greeting,
@@ -380,7 +418,7 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
   // Step 1 → Step 2: AI提案を取得
   async function handleGetProposal() {
     if (!title) {
-      toast.error('テーマを入力してください')
+      toast.error('管理名を入力してください')
       return
     }
     if (!templateId || !selectedTemplate) {
@@ -440,6 +478,7 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
           applyAnswerToForm(section.section_type, q.question_id, val)
           // saveDraft用に値を記録（setterは次レンダーまで反映されないため）
           switch (section.section_type) {
+            case 'newsletter_title': case 'title': case 'feature': appliedFields.subject = val; break
             case 'greeting': appliedFields.greeting = val; break
             case 'recommend_title': appliedFields.recommendTitle = val; break
             case 'product_list':
@@ -452,15 +491,15 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
               else if (q.question_id.includes('url') || q.question_id.includes('link'))
                 appliedFields.ctaButtonUrl = val
               break
-            case 'feature_title': case 'feature':
-              if (q.question_id.includes('description') || q.question_id.includes('desc'))
-                appliedFields.featureDescription = val
-              else appliedFields.featureTitle = val
-              break
             case 'ranking':
               if (q.question_id.includes('title')) {
                 appliedFields.subSectionTitle = val
                 appliedFields.useSubSection = true
+              }
+              break
+            default:
+              if (section.section_type.includes('title') && !section.section_type.includes('recommend')) {
+                appliedFields.subject = val
               }
               break
           }
@@ -502,6 +541,12 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
             }),
           })
         }
+      }
+
+      // 件名が未設定の場合、管理名をデフォルトとしてセット
+      if (!appliedFields.subject) {
+        setSubject(title)
+        appliedFields.subject = title
       }
 
       // draft_data を保存（appliedFieldsで最新値を上書き）
@@ -551,20 +596,28 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
       })
       await saveDraft(id, proposal, answers)
 
-      // 商品保存
-      if (validProducts.length > 0) {
+      // 商品保存（おすすめ + ランキング/紹介を結合して保存）
+      const validSubProducts = subSectionProducts.filter(p => p.product_url)
+      const allProductsToSave = [
+        ...validProducts.map((p, i) => ({
+          ...p,
+          is_ranking: false,
+          rank_position: null,
+          sort_order: i,
+        })),
+        ...validSubProducts.map((p, i) => ({
+          ...p,
+          is_ranking: true,
+          rank_position: i + 1,
+          sort_order: validProducts.length + i,
+        })),
+      ]
+      if (allProductsToSave.length > 0) {
         await fetch(`/api/newsletter/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            products: validProducts.map((p, i) => ({
-              ...p,
-              is_ranking: productAssignment.ranking.includes(i),
-              rank_position: productAssignment.ranking.includes(i)
-                ? productAssignment.ranking.indexOf(i) + 1
-                : null,
-              sort_order: i,
-            })),
+            products: allProductsToSave,
           }),
         })
       }
@@ -575,6 +628,7 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           answers,
+          subject,
           direction_memo: directionMemo,
           header: useHeader ? { image_url: headerImageUrl } : null,
           greeting,
@@ -602,6 +656,9 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
       const result = await res.json()
       setGeneratedHtml(result.html)
       setCurrentStep(3)
+      // キャッシュを削除して、ダッシュボードに戻った後に古いデータが一瞬表示されるのを防ぐ
+      queryClient.removeQueries({ queryKey: ['newsletter', id] })
+      queryClient.invalidateQueries({ queryKey: ['newsletters'] })
       toast.success('メルマガHTMLを生成しました')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'HTML生成に失敗しました')
@@ -664,8 +721,8 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
           {/* テーマ */}
           <Card>
             <CardHeader>
-              <CardTitle>特集テーマ</CardTitle>
-              <CardDescription>メルマガの特集テーマを入力してください</CardDescription>
+              <CardTitle>管理名</CardTitle>
+              <CardDescription>このメルマガの管理用の名前を入力してください（例: 特集テーマ名）</CardDescription>
             </CardHeader>
             <CardContent>
               <Input
@@ -1056,8 +1113,24 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
             AIの提案が上のフォームから自動反映されています。必要に応じて修正してください。
           </p>
 
-          {/* ① ヘッダー有無 */}
+          {/* 件名 */}
           <Card>
+            <CardHeader>
+              <CardTitle>件名</CardTitle>
+              <CardDescription>メルマガの件名（メールの件名として使用されます）</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Input
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="例: 【容器なび】春のテイクアウト容器特集"
+                className="text-lg"
+              />
+            </CardContent>
+          </Card>
+
+          {/* ① ヘッダー有無 */}
+          <Card id="header-image-section">
             <CardHeader>
               <CardTitle>① ヘッダー画像</CardTitle>
               <CardDescription>メルマガ上部のヘッダー画像を使用しますか？</CardDescription>
@@ -1234,7 +1307,7 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
                   {/* 商品URL入力 */}
                   <div className="space-y-3">
                     <Label className="text-sm font-semibold">
-                      {sectionType === 'ranking' ? 'ランキング商品（最大4商品）' : '紹介商品（最大2商品）'}
+                      {sectionType === 'ranking' ? 'ランキング商品（最大4商品）' : '紹介商品（最大4商品）'}
                     </Label>
                     {subSectionProducts.map((product, index) => (
                       <ProductInput
@@ -1246,7 +1319,7 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
                         isRanking={sectionType === 'ranking'}
                       />
                     ))}
-                    {subSectionProducts.length < (sectionType === 'ranking' ? 4 : 2) && (
+                    {subSectionProducts.length < MAX_PRODUCTS && (
                       <Button type="button" variant="outline" onClick={addSubSectionProduct} className="w-full">
                         <Plus className="mr-1 h-4 w-4" />
                         {sectionType === 'ranking'
@@ -1324,30 +1397,70 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
             </CardContent>
           </Card>
 
-          {/* ⑦ 特集 */}
+          {/* ⑦ コンテンツゾーン（ステップ①と同一データ） */}
           <Card>
             <CardHeader>
-              <CardTitle>⑦ 特集</CardTitle>
-              <CardDescription>特集セクションの内容を設定してください</CardDescription>
+              <CardTitle>⑦ コンテンツゾーン</CardTitle>
+              <CardDescription>メルマガ下部に表示するコンテンツを編集できます（画像・リンク・テキスト）</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-2">
-                <Label className="text-xs">特集タイトル</Label>
-                <Input
-                  value={featureTitle}
-                  onChange={(e) => setFeatureTitle(e.target.value)}
-                  placeholder="例: 今月の特集"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs">特集の説明</Label>
-                <Textarea
-                  value={featureDescription}
-                  onChange={(e) => setFeatureDescription(e.target.value)}
-                  placeholder="特集の内容を入力"
-                  rows={3}
-                />
-              </div>
+            <CardContent className="space-y-4">
+              {contentZone.length === 0 ? (
+                <p className="text-sm text-muted-foreground">コンテンツゾーンは未設定です。ステップ①で追加するか、下のボタンから追加してください。</p>
+              ) : (
+                contentZone.map((block, index) => (
+                  <div key={block.id} className="rounded-lg border p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold">コンテンツ {index + 1}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeContentZoneBlock(block.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs flex items-center gap-1">
+                        <ImageIcon className="h-3 w-3 text-blue-500" />
+                        画像URL
+                      </Label>
+                      <Input
+                        value={block.image_url}
+                        onChange={(e) => updateContentZoneBlock(block.id, { image_url: e.target.value })}
+                        placeholder="https://..."
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs flex items-center gap-1">
+                        <Link className="h-3 w-3 text-green-500" />
+                        リンクURL
+                      </Label>
+                      <Input
+                        value={block.link_url}
+                        onChange={(e) => updateContentZoneBlock(block.id, { link_url: e.target.value })}
+                        placeholder="https://..."
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs flex items-center gap-1">
+                        <Type className="h-3 w-3 text-orange-500" />
+                        テキスト
+                      </Label>
+                      <Textarea
+                        value={block.text}
+                        onChange={(e) => updateContentZoneBlock(block.id, { text: e.target.value })}
+                        placeholder="テキスト内容を入力"
+                        rows={2}
+                      />
+                    </div>
+                  </div>
+                ))
+              )}
+              <Button type="button" variant="outline" onClick={addContentZoneBlock} className="w-full">
+                <Plus className="mr-1 h-4 w-4" />
+                コンテンツを追加
+              </Button>
             </CardContent>
           </Card>
 
@@ -1407,18 +1520,40 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
             </div>
           </div>
 
+          {/* メルマガ件名 */}
+          <Card>
+            <CardContent className="flex items-center justify-between py-4">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">メルマガ件名</p>
+                <p className="font-medium">{subject || title}</p>
+              </div>
+              <CopyButton text={subject || title} label="件名をコピー" />
+            </CardContent>
+          </Card>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>HTMLソース</CardTitle>
-                  <CopyButton text={generatedHtml} label="HTMLをコピー" />
+                  <div className="flex gap-2">
+                    {editableHtml !== generatedHtml && (
+                      <Button size="sm" onClick={handleApplyHtmlEdit}>
+                        <Code className="mr-1 h-4 w-4" />
+                        プレビューに反映
+                      </Button>
+                    )}
+                    <CopyButton text={editableHtml} label="HTMLをコピー" />
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
-                <pre className="bg-muted p-4 rounded-lg overflow-auto max-h-[600px] text-xs font-mono whitespace-pre-wrap">
-                  {generatedHtml}
-                </pre>
+                <textarea
+                  value={editableHtml}
+                  onChange={(e) => setEditableHtml(e.target.value)}
+                  className="w-full bg-muted p-4 rounded-lg max-h-[600px] min-h-[600px] text-xs font-mono whitespace-pre resize-y border-0 focus:outline-none focus:ring-1 focus:ring-primary"
+                  spellCheck={false}
+                />
               </CardContent>
             </Card>
 
@@ -1429,9 +1564,8 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
               <CardContent>
                 <div className="border rounded-lg overflow-hidden bg-white">
                   <iframe
-                    srcDoc={generatedHtml}
+                    ref={previewIframeRef}
                     className="w-full min-h-[600px]"
-                    sandbox="allow-same-origin"
                     title="メールプレビュー"
                   />
                 </div>
@@ -1459,9 +1593,19 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
             open={bannerDialogOpen}
             onOpenChange={setBannerDialogOpen}
             newsletterId={newsletterId || null}
-            title={title}
+            title={subject || title}
             products={products}
             subSectionProducts={subSectionProducts}
+            onApplyAsHeader={(bannerUrl) => {
+              setUseHeader(true)
+              setHeaderImageUrl(bannerUrl)
+              setBannerDialogOpen(false)
+              setCurrentStep(2)
+              toast.info('ヘッダー画像を設定しました。「HTMLを生成」で反映してください。')
+              setTimeout(() => {
+                document.getElementById('header-image-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              }, 100)
+            }}
           />
         </div>
       )}

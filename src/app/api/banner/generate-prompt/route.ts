@@ -23,7 +23,7 @@ export async function POST(request: Request) {
         url,
         name: `商品${i + 1}`,
       })),
-      mainText: parsed.data.main_text,
+      mainText: parsed.data.main_text || parsed.data.newsletter_title,
       subText: parsed.data.sub_text,
       width: parsed.data.width,
       height: parsed.data.height,

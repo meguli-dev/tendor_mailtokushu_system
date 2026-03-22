@@ -32,6 +32,7 @@ export interface NewsletterDraftData {
   }
   answers?: Record<string, string>
   formFields?: {
+    subject?: string
     useHeader?: boolean
     headerImageUrl?: string
     greeting?: string

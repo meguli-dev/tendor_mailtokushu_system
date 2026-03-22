@@ -52,7 +52,7 @@ JSONのみを返し、他のテキストは含めないでください。
     {
       "section_id": "セクションを識別するID（例: hero, greeting, recommend, ranking, cta）",
       "section_name": "セクション名（例: ヘッダー画像, 挨拶文, おすすめ商品, ランキング, CTAボタン）",
-      "section_type": "セクションの種類: header_image | greeting | recommend_title | product_list | ranking | cta | feature",
+      "section_type": "セクションの種類: newsletter_title | header_image | greeting | recommend_title | product_list | ranking | cta",
       "description": "このセクションで何を表示するかの説明",
       "questions": [
         {
@@ -86,7 +86,9 @@ JSONのみを返し、他のテキストは含めないでください。
 7. CTAボタンがテンプレートにある場合、リンク先URLとボタンテキストの入力欄を必ず含めてください。
 8. 容器なびのBtoB向けメルマガとして適切なトーンを心がけてください。
 9. ヘッダー画像（header_image）セクションでは、画像URLを提案しないでください。代わりに「こんな画像を使うと効果的です」というアドバイスをtextareaで提案してください（例: 「丼ぶり容器の集合写真や、テイクアウトのシーンがわかるイメージ画像がおすすめです」）。画像URLの入力はユーザーが別途行います。requiredはfalseにしてください。
-10. おすすめ商品のタイトル（section_type: recommend_title）は「おすすめタイトル」というセクション名にしてください。「特集タイトル」ではなく「おすすめタイトル」を使ってください。`
+10. おすすめ商品のタイトル（section_type: recommend_title）は「おすすめタイトル」というセクション名にしてください。「特集タイトル」ではなく「おすすめタイトル」を使ってください。
+11. コンテンツゾーン（特集）はユーザーが手動で設定するため、AIの提案対象外です。
+12. メルマガタイトルのセクションは必ず section_type: "newsletter_title" を使用してください。"feature" は使わないでください。`
 
   try {
     const response = await generateText(prompt)

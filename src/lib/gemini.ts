@@ -3,7 +3,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
 
 export async function generateBannerImage(params: {
-  mainText: string
+  mainText?: string
+  newsletterTitle: string
   subText?: string
   width: number
   height: number
@@ -86,17 +87,21 @@ async function fetchImageAsPart(url: string) {
 }
 
 function buildBannerPrompt(params: {
-  mainText: string
+  mainText?: string
+  newsletterTitle: string
   subText?: string
   width: number
   height: number
   pageContext?: string
 }): string {
-  return `あなたはプロのグラフィックデザイナーです。以下の条件でメルマガ用バナー画像を1枚生成してください。
+  const hasMainText = params.mainText && params.mainText.trim()
+
+  if (hasMainText) {
+    // メインテキストが指定されている場合：そのまま使う
+    return `あなたはプロのグラフィックデザイナーです。以下の条件でメルマガ用バナー画像を1枚生成してください。
 
 【サイズ】${params.width} x ${params.height}px
-【メインテキスト】${params.mainText}
-${params.subText ? `【サブテキスト】${params.subText}` : ''}
+【バナーに表示するテキスト】${params.mainText}
 ${params.pageContext ? `【コンテキスト】${params.pageContext}` : ''}
 
 【デザイン要件】
@@ -106,6 +111,30 @@ ${params.pageContext ? `【コンテキスト】${params.pageContext}` : ''}
 - 商品画像が提供されている場合は、バランスよく配置
 - 背景はテーマに合った色使い（暖色系推奨）
 - プロフェッショナルで洗練された印象
+- 商品の型番（英数字の品番コード）はバナーに含めないこと
+
+画像のみを生成してください。`
+  }
+
+  // メインテキストが空の場合：メルマガタイトルからバナー用テキストを考えて画像生成
+  return `あなたはプロのグラフィックデザイナーです。以下の条件でメルマガ用バナー画像を1枚生成してください。
+
+【サイズ】${params.width} x ${params.height}px
+【メルマガタイトル】${params.newsletterTitle}
+${params.pageContext ? `【コンテキスト】${params.pageContext}` : ''}
+
+【テキスト生成の指示】
+上記のメルマガタイトルを元に、バナー画像に映えるキャッチーで短いテキストを考えて配置してください。
+タイトルをそのまま使うのではなく、バナー向けに簡潔で目を引く表現にアレンジしてください。
+
+【デザイン要件】
+- 日本語テキストは大きく読みやすく配置
+- 食品容器・テイクアウト向けの清潔感のあるデザイン
+- メインテキストが最も目立つように
+- 商品画像が提供されている場合は、バランスよく配置
+- 背景はテーマに合った色使い（暖色系推奨）
+- プロフェッショナルで洗練された印象
+- 商品の型番（英数字の品番コード）はバナーに含めないこと
 
 画像のみを生成してください。`
 }

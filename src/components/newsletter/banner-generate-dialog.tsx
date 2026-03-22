@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Loader2, Download, ImageIcon, Check, PenLine, RotateCcw } from 'lucide-react'
+import { Loader2, Download, ImageIcon, Check, PenLine, RotateCcw, FileCode } from 'lucide-react'
 import { CopyButton } from '@/components/shared/copy-button'
 import { toast } from 'sonner'
 
@@ -31,6 +31,7 @@ interface BannerGenerateDialogProps {
   title: string
   products: ProductData[]
   subSectionProducts?: ProductData[]
+  onApplyAsHeader: (bannerUrl: string) => void
 }
 
 interface SelectableProduct {
@@ -49,6 +50,7 @@ export function BannerGenerateDialog({
   title,
   products,
   subSectionProducts = [],
+  onApplyAsHeader,
 }: BannerGenerateDialogProps) {
   const [referenceImageUrl, setReferenceImageUrl] = useState('')
   const [width, setWidth] = useState(800)
@@ -62,6 +64,7 @@ export function BannerGenerateDialog({
   const [editCount, setEditCount] = useState(0)
   const [editInstruction, setEditInstruction] = useState('')
   const [isEditing, setIsEditing] = useState(false)
+  const [appliedToHtml, setAppliedToHtml] = useState(false)
 
   // Build selectable product list from both sources
   const allProducts: SelectableProduct[] = []
@@ -95,6 +98,7 @@ export function BannerGenerateDialog({
       setEditCount(0)
       setEditInstruction('')
       setGeneratedUrl('')
+      setAppliedToHtml(false)
     }
   }, [open])
 
@@ -117,6 +121,7 @@ export function BannerGenerateDialog({
     setGeneratedUrl('')
     setEditCount(0)
     setEditInstruction('')
+    setAppliedToHtml(false)
     try {
       const selectedImages = allProducts
         .filter((p) => selectedProductIds.has(p.id))
@@ -130,7 +135,8 @@ export function BannerGenerateDialog({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          main_text: mainText || title,
+          main_text: mainText || undefined,
+          newsletter_title: title,
           sub_text: selectedNames.length > 0 ? selectedNames.join('、') : undefined,
           width,
           height,
@@ -181,12 +187,23 @@ export function BannerGenerateDialog({
       setGeneratedUrl(data.s3Url)
       setEditCount((prev) => prev + 1)
       setEditInstruction('')
+      setAppliedToHtml(false)
       toast.success(`編集完了（${editCount + 1}/${MAX_EDITS}回）`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '画像編集に失敗しました')
     } finally {
       setIsEditing(false)
     }
+  }
+
+  function handleApplyAsHeader() {
+    if (!generatedUrl) {
+      toast.error('バナー画像がありません')
+      return
+    }
+    onApplyAsHeader(generatedUrl)
+    setAppliedToHtml(true)
+    toast.success('バナーをヘッダー画像に設定しました。HTMLを再生成してください。')
   }
 
   function handleClose(value: boolean) {
@@ -346,7 +363,7 @@ export function BannerGenerateDialog({
                   alt="生成されたバナー"
                   className="w-full rounded border"
                 />
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <CopyButton text={generatedUrl} label="URLをコピー" />
                   <Button variant="outline" size="sm" asChild>
                     <a href={generatedUrl} download="banner.png" target="_blank" rel="noopener noreferrer">
@@ -354,6 +371,17 @@ export function BannerGenerateDialog({
                       ダウンロード
                     </a>
                   </Button>
+                  {!appliedToHtml ? (
+                    <Button size="sm" onClick={handleApplyAsHeader}>
+                      <FileCode className="mr-1 h-4 w-4" />
+                      ヘッダー画像に設定
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" disabled>
+                      <Check className="mr-1 h-4 w-4" />
+                      適用済み
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -406,20 +434,16 @@ export function BannerGenerateDialog({
           {generatedUrl ? (
             <Button
               variant="outline"
-              onClick={handleGenerate}
+              onClick={() => {
+                setGeneratedUrl('')
+                setEditCount(0)
+                setEditInstruction('')
+                setAppliedToHtml(false)
+              }}
               disabled={isProcessing}
             >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  生成中...
-                </>
-              ) : (
-                <>
-                  <RotateCcw className="mr-1 h-4 w-4" />
-                  最初から再生成
-                </>
-              )}
+              <RotateCcw className="mr-1 h-4 w-4" />
+              設定を変更して再生成
             </Button>
           ) : (
             <Button

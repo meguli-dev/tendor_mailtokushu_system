@@ -12,6 +12,7 @@ export const newsletterSchema = z.object({
   header_image_url: z.string().url().nullable().optional(),
   feature_title: z.string().max(255).nullable().optional(),
   feature_description: z.string().nullable().optional(),
+  html_output: z.string().nullable().optional(),
   draft_data: z.any().nullable().optional(),
   status: z.enum(['draft', 'exported', 'sent']).default('draft'),
 })
@@ -63,7 +64,8 @@ export const imageUploadSchema = z.object({
 export const bannerGenerateSchema = z.object({
   template_pattern: z.string().optional(),
   product_images: z.array(z.string().url()).default([]),
-  main_text: z.string().min(1),
+  main_text: z.string().optional(),
+  newsletter_title: z.string().min(1),
   sub_text: z.string().optional(),
   width: z.number().int().default(800),
   height: z.number().int().default(400),

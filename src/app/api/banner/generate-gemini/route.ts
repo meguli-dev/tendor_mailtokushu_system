@@ -20,6 +20,7 @@ export async function POST(request: Request) {
 
     const result = await generateBannerImage({
       mainText: parsed.data.main_text,
+      newsletterTitle: parsed.data.newsletter_title,
       subText: parsed.data.sub_text,
       width: parsed.data.width,
       height: parsed.data.height,

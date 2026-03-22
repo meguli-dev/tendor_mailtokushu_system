@@ -18,6 +18,7 @@ export async function POST(
   const body = await request.json().catch(() => ({}))
   const {
     answers,
+    subject,
     product_assignments,
     direction_memo,
     header,
@@ -29,6 +30,7 @@ export async function POST(
     content_zone,
   } = body as {
     answers?: Record<string, string>
+    subject?: string
     product_assignments?: {
       recommend: number[]
       ranking: number[]
@@ -120,6 +122,7 @@ export async function POST(
     const html = await generateNewsletterWithAI({
       templateHtml: (template as NewsletterTemplate).html_template,
       theme: newsletter.title,
+      subject: subject || newsletter.title,
       directionMemo: direction_memo || newsletter.feature_description || undefined,
       answers: answers || {},
       products: assignedProducts,

@@ -84,6 +84,7 @@ ${rawHtml}`
 export async function generateNewsletterWithAI(params: {
   templateHtml: string
   theme: string
+  subject?: string
   directionMemo?: string
   answers: Record<string, string>
   products: Array<{
@@ -114,7 +115,8 @@ export async function generateNewsletterWithAI(params: {
     contentZone?: Array<{ image_url: string; link_url: string; text: string }>
   }
 }): Promise<string> {
-  const { templateHtml, theme, directionMemo, answers, products, formFields } = params
+  const { templateHtml, theme, subject, directionMemo, answers, products, formFields } = params
+  const newsletterSubject = subject || theme
 
   const recommendProducts = products
     .filter(p => p.role === 'recommend')
@@ -194,8 +196,11 @@ export async function generateNewsletterWithAI(params: {
 
 ${templateHtml}
 
-## 特集テーマ
+## 特集テーマ（管理名）
 ${theme}
+
+## メルマガ件名
+${newsletterSubject}
 
 ## 方向性・指示
 ${directionMemo || '特になし'}
@@ -230,13 +235,15 @@ ${rankingListText || '（ランキング商品なし）'}
    - {{RANKING_N_BADGE}} → ランキングN のバッジ（フォーム設定のタグを使用）
 
 3. **フォーム設定を反映するもの（最優先）:**
-   - {{NEWSLETTER_TITLE}} → テーマから適切なタイトルを生成
+   - {{NEWSLETTER_TITLE}} → メルマガの件名「${newsletterSubject}」を使用（titleタグ、h1等のメイン見出しに使用）。これはメール全体の件名であり、おすすめセクションのタイトルではない。特集テーマ（管理名）とは別物。
    - {{GREETING_TEXT}} → フォーム設定の挨拶文を使用
    - {{FEATURE_TITLE}} → フォーム設定の特集タイトル（空なら省略）
    - {{FEATURE_DESCRIPTION}} → フォーム設定の特集説明（空なら省略）
    - {{CTA_URL}} → フォーム設定のCTAリンク先URL
    - {{CTA_TEXT}} → フォーム設定のCTAボタンテキスト
    - {{RANKING_TITLE}} → フォーム設定のランキングタイトル
+
+   **重要: おすすめ商品セクションのタイトルにはフォーム設定の「おすすめタイトル」を使用してください。メルマガタイトル（件名）をおすすめセクションのタイトルに使わないでください。これらは別のものです。**
 
 4. **AIが生成するもの:**
    - {{PRODUCT_N_DESCRIPTION}} → 商品名と特集テーマから適切な説明文（1-2文）
