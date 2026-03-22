@@ -2,6 +2,10 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
 
+// 画像生成モデル（コスト: Pro=$0.134/枚, 3.1 Flash=$0.067/枚, 2.5 Flash=$0.039/枚）
+const IMAGE_MODEL = 'gemini-3.1-flash-image-preview'
+const IMAGE_EDIT_MODEL = 'gemini-2.5-flash-preview-image-generation'
+
 export async function generateBannerImage(params: {
   mainText?: string
   newsletterTitle: string
@@ -13,7 +17,7 @@ export async function generateBannerImage(params: {
   pageContext?: string
 }): Promise<{ imageData: string; mimeType: string }> {
   const model = genAI.getGenerativeModel({
-    model: 'gemini-3-pro-image-preview',
+    model: IMAGE_MODEL,
     generationConfig: {
       // @ts-expect-error -- responseModalities is supported in v0.24+ but not yet in types
       responseModalities: ['TEXT', 'IMAGE'],
@@ -32,7 +36,7 @@ export async function generateBannerImage(params: {
     try {
       const refPart = await fetchImageAsPart(params.referenceImageUrl)
       parts.push(refPart)
-      parts.push({ text: '上記は参考画像です。このスタイル・雰囲気を参考にしてバナーを生成してください。' })
+      parts.push({ text: '上記は参考画像です。レイアウトや色使いの雰囲気のみ参考にしてください。参考画像に含まれるテキスト・文字・ロゴは一切コピーしないでください。' })
     } catch {
       // Reference image fetch failed, continue without it
     }
@@ -49,7 +53,7 @@ export async function generateBannerImage(params: {
       }
     }
     if (params.productImages.length > 0) {
-      parts.push({ text: '上記は商品画像です。バナーに配置してください。' })
+      parts.push({ text: '上記は商品画像です。各商品画像の背景を完全に削除（透過切り抜き）してから、バナーに配置してください。商品本体のみを使用し、元の背景は一切残さないでください。' })
     }
   }
 
@@ -108,10 +112,16 @@ ${params.pageContext ? `【コンテキスト】${params.pageContext}` : ''}
 - 日本語テキストは大きく読みやすく配置
 - 食品容器・テイクアウト向けの清潔感のあるデザイン
 - メインテキストが最も目立つように
-- 商品画像が提供されている場合は、バランスよく配置
+- 商品画像が提供されている場合は、背景を完全に除去して商品本体のみを切り抜いてから配置
 - 背景はテーマに合った色使い（暖色系推奨）
 - プロフェッショナルで洗練された印象
 - 商品の型番（英数字の品番コード）はバナーに含めないこと
+
+【テキストに関する厳守事項】
+- バナーに含めるテキストは上記で指定したもの「だけ」にすること
+- 指定されていないテキスト、キャッチコピー、説明文は一切追加しないこと
+- 参考画像に含まれる文字を読み取ってコピー・模倣しないこと
+- シンプルで文字の少ないバナーを目指すこと
 
 画像のみを生成してください。`
   }
@@ -124,17 +134,23 @@ ${params.pageContext ? `【コンテキスト】${params.pageContext}` : ''}
 ${params.pageContext ? `【コンテキスト】${params.pageContext}` : ''}
 
 【テキスト生成の指示】
-上記のメルマガタイトルを元に、バナー画像に映えるキャッチーで短いテキストを考えて配置してください。
+上記のメルマガタイトルを元に、バナー画像に映えるキャッチーで短いテキストを1つだけ考えて配置してください。
 タイトルをそのまま使うのではなく、バナー向けに簡潔で目を引く表現にアレンジしてください。
 
 【デザイン要件】
 - 日本語テキストは大きく読みやすく配置
 - 食品容器・テイクアウト向けの清潔感のあるデザイン
 - メインテキストが最も目立つように
-- 商品画像が提供されている場合は、バランスよく配置
+- 商品画像が提供されている場合は、背景を完全に除去して商品本体のみを切り抜いてから配置
 - 背景はテーマに合った色使い（暖色系推奨）
 - プロフェッショナルで洗練された印象
 - 商品の型番（英数字の品番コード）はバナーに含めないこと
+
+【テキストに関する厳守事項】
+- バナーに含めるテキストは生成した1つのキャッチコピーのみにすること
+- それ以外の説明文、サブテキスト、補足文言は一切追加しないこと
+- 参考画像に含まれる文字を読み取ってコピー・模倣しないこと
+- シンプルで文字の少ないバナーを目指すこと
 
 画像のみを生成してください。`
 }
@@ -144,7 +160,7 @@ export async function editBannerImage(params: {
   editInstruction: string
 }): Promise<{ imageData: string; mimeType: string }> {
   const model = genAI.getGenerativeModel({
-    model: 'gemini-3-pro-image-preview',
+    model: IMAGE_MODEL,
     generationConfig: {
       // @ts-expect-error -- responseModalities is supported in v0.24+ but not yet in types
       responseModalities: ['TEXT', 'IMAGE'],

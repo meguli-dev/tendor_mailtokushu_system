@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Loader2, Download, ImageIcon, Check, PenLine, RotateCcw, FileCode } from 'lucide-react'
+import { Loader2, Download, ImageIcon, Check, PenLine, RotateCcw, FileCode, AlertTriangle } from 'lucide-react'
 import { CopyButton } from '@/components/shared/copy-button'
 import { toast } from 'sonner'
 
@@ -66,6 +66,9 @@ export function BannerGenerateDialog({
   const [isEditing, setIsEditing] = useState(false)
   const [appliedToHtml, setAppliedToHtml] = useState(false)
 
+  // 月間使用量
+  const [usage, setUsage] = useState<{ used: number; limit: number; remaining: number; isOverLimit: boolean } | null>(null)
+
   // Build selectable product list from both sources
   const allProducts: SelectableProduct[] = []
   products.forEach((p, i) => {
@@ -91,7 +94,7 @@ export function BannerGenerateDialog({
     }
   })
 
-  // Reset when dialog opens
+  // Reset when dialog opens + fetch usage
   useEffect(() => {
     if (open) {
       setSelectedProductIds(new Set())
@@ -99,6 +102,11 @@ export function BannerGenerateDialog({
       setEditInstruction('')
       setGeneratedUrl('')
       setAppliedToHtml(false)
+      // 使用量を取得
+      fetch('/api/banner/usage')
+        .then(res => res.json())
+        .then(data => setUsage(data))
+        .catch(() => {})
     }
   }, [open])
 
@@ -154,6 +162,7 @@ export function BannerGenerateDialog({
 
       const data = await res.json()
       setGeneratedUrl(data.s3Url)
+      if (data.usage) setUsage(data.usage)
       toast.success('バナー画像を生成しました')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'バナー生成に失敗しました')
@@ -226,6 +235,28 @@ export function BannerGenerateDialog({
             メルマガの内容をもとにAI（Gemini）でバナー画像を生成します。
           </DialogDescription>
         </DialogHeader>
+
+        {/* 月間使用量 */}
+        {usage && (
+          <div className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
+            usage.isOverLimit
+              ? 'bg-destructive/10 text-destructive'
+              : usage.remaining <= 5
+                ? 'bg-yellow-50 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-200'
+                : 'bg-muted text-muted-foreground'
+          }`}>
+            <span>
+              今月の生成: {usage.used}/{usage.limit}枚
+              {usage.isOverLimit && (
+                <span className="ml-1 font-medium">
+                  <AlertTriangle className="inline h-3.5 w-3.5 mr-0.5" />
+                  超過分は追加料金が発生します
+                </span>
+              )}
+            </span>
+            <span className="font-medium">残り {usage.remaining}枚</span>
+          </div>
+        )}
 
         <div className="space-y-4 py-2">
           {/* Generation settings - collapse after generation */}

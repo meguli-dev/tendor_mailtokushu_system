@@ -4,6 +4,8 @@ import { bannerGenerateSchema } from '@/lib/validators'
 import { uploadToS3 } from '@/lib/s3'
 import { NextResponse } from 'next/server'
 
+const MONTHLY_LIMIT = 30
+
 export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -17,6 +19,19 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
     }
+
+    // 月間生成数チェック
+    const now = new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+    const { count } = await supabase
+      .from('banner_generation_logs')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('is_edit', false)
+      .gte('created_at', monthStart)
+
+    const used = count || 0
+    const isOverLimit = used >= MONTHLY_LIMIT
 
     const result = await generateBannerImage({
       mainText: parsed.data.main_text,
@@ -49,17 +64,29 @@ export async function POST(request: Request) {
       file_size: buffer.length,
     })
 
-    // Log generation
+    // Log generation (is_edit=false)
     await supabase.from('banner_generation_logs').insert({
       user_id: user.id,
+      newsletter_id: parsed.data.newsletter_id || null,
       method: 'gemini',
       prompt: JSON.stringify(parsed.data),
       input_params: parsed.data,
       result_image_url: s3Url,
       status: 'generated',
+      is_edit: false,
     })
 
-    return NextResponse.json({ s3Url, s3Key, mimeType: result.mimeType })
+    return NextResponse.json({
+      s3Url,
+      s3Key,
+      mimeType: result.mimeType,
+      usage: {
+        used: used + 1,
+        limit: MONTHLY_LIMIT,
+        remaining: Math.max(0, MONTHLY_LIMIT - used - 1),
+        isOverLimit,
+      },
+    })
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : '画像生成に失敗しました' },

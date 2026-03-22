@@ -48,6 +48,17 @@ export async function POST(request: Request) {
       file_size: buffer.length,
     })
 
+    // Log edit (is_edit=true, カウント対象外)
+    await supabase.from('banner_generation_logs').insert({
+      user_id: user.id,
+      method: 'gemini',
+      prompt: parsed.data.edit_instruction,
+      input_params: parsed.data,
+      result_image_url: s3Url,
+      status: 'generated',
+      is_edit: true,
+    })
+
     return NextResponse.json({ s3Url, s3Key, mimeType: result.mimeType })
   } catch (err) {
     return NextResponse.json(
