@@ -86,7 +86,7 @@ export default function EditFeaturePage({ params }: { params: Promise<{ id: stri
 
   async function handleExport() {
     try {
-      const result = await exportMutation.mutateAsync(id)
+      const result = await exportMutation.mutateAsync({ id })
       setHtml(result.html)
       toast.success('HTMLを生成しました')
     } catch (err) {

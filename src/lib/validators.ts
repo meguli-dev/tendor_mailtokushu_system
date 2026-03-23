@@ -40,7 +40,11 @@ export const newsletterTemplateSchema = z.object({
 export const featurePageSchema = z.object({
   title: z.string().min(1, 'タイトルを入力してください').max(255),
   template_id: z.string().uuid().nullable(),
+  template_type: z.enum(['new_product', 'category', 'simple']).nullable().optional(),
+  theme_color: z.string().max(7).nullable().optional(),
   header_image_url: z.string().url().nullable().optional(),
+  html_output: z.string().nullable().optional(),
+  draft_data: z.any().nullable().optional(),
   status: z.enum(['draft', 'published']).default('draft'),
 })
 

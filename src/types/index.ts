@@ -2,6 +2,7 @@
 
 export type NewsletterStatus = 'draft' | 'exported' | 'sent'
 export type FeaturePageStatus = 'draft' | 'published'
+export type FeatureTemplateType = 'new_product' | 'category' | 'simple'
 export type ImageType = 'product' | 'banner' | 'header' | 'other'
 export type BannerMethod = 'gemini' | 'genspark_prompt' | 'manus' | 'manual'
 export type BannerStatus = 'pending' | 'generated' | 'approved' | 'rejected'
@@ -94,13 +95,46 @@ export interface NewsletterTemplate {
   updated_at: string
 }
 
+export interface FeaturePageDraftData {
+  formFields?: {
+    heroImageUrl?: string
+    introText?: string
+    appealText?: string
+    directionMemo?: string
+    ctaUrl?: string
+    ctaText?: string
+    // Template A: 新商品紹介型
+    badgeText?: string
+    problemSectionTitle?: string
+    problemBefore?: string[]
+    problemAfter?: string[]
+    solutionText?: string
+    mainFeatures?: Array<{ title: string; description: string }>
+    subFeatures?: string[]
+    useCases?: Array<{ title: string; description: string }>
+    sizeGuide?: Array<{ label: string; specs: string; description: string }>
+    faqItems?: Array<{ question: string; answer: string }>
+    // Template B: カテゴリ特集型
+    selectionGuideText?: string
+    // Product categories for Template A
+    productCategories?: Array<{
+      title: string
+      productIndices: number[]
+    }>
+  }
+  aiGenerated?: boolean
+}
+
 export interface FeaturePage {
   id: string
   user_id: string
   title: string
   template_id: string | null
+  template_type: FeatureTemplateType | null
+  theme_color: string | null
   header_image_url: string | null
   html_output: string | null
+  draft_data: FeaturePageDraftData | null
   status: FeaturePageStatus
   created_at: string
   updated_at: string
