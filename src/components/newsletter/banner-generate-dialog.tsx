@@ -61,7 +61,7 @@ export function BannerGenerateDialog({
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set())
 
   // Model selection
-  const [imageModel, setImageModel] = useState<'gemini-3.1-flash-image-preview' | 'gemini-2.5-pro-preview-image-generation'>('gemini-3.1-flash-image-preview')
+  const [imageModel, setImageModel] = useState<'gemini-3.1-flash-image-preview' | 'gemini-3-pro-image-preview'>('gemini-3.1-flash-image-preview')
 
   // Edit state
   const [editCount, setEditCount] = useState(0)
@@ -276,9 +276,9 @@ export function BannerGenerateDialog({
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
                   <option value="gemini-3.1-flash-image-preview">Gemini 3.1 Flash（通常）</option>
-                  <option value="gemini-2.5-pro-preview-image-generation">Gemini 2.5 Pro（高品質）</option>
+                  <option value="gemini-3-pro-image-preview">Gemini 3 Pro（高品質）</option>
                 </select>
-                {imageModel === 'gemini-2.5-pro-preview-image-generation' && (
+                {imageModel === 'gemini-3-pro-image-preview' && (
                   <p className="text-xs text-yellow-600 dark:text-yellow-400">
                     ※ 高品質モデルは1回の生成で2枚分を消費します
                   </p>
