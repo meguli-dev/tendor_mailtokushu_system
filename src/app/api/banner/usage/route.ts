@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
-const MONTHLY_LIMIT = 30
+const MONTHLY_LIMIT = 60
 
 export async function GET() {
   const supabase = await createClient()

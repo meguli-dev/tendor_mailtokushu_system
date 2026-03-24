@@ -4,7 +4,7 @@ import { bannerGenerateSchema } from '@/lib/validators'
 import { uploadToS3 } from '@/lib/s3'
 import { NextResponse } from 'next/server'
 
-const MONTHLY_LIMIT = 30
+const MONTHLY_LIMIT = 60
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -42,6 +42,7 @@ export async function POST(request: Request) {
       productImages: parsed.data.product_images,
       referenceImageUrl: parsed.data.reference_image_url,
       pageContext: parsed.data.page_context,
+      imageModel: parsed.data.image_model,
     })
 
     // Upload generated image to S3

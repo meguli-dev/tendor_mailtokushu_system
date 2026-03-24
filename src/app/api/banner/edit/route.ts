@@ -7,6 +7,7 @@ import { z } from 'zod'
 const editSchema = z.object({
   base_image_url: z.string().min(1),
   edit_instruction: z.string().min(1, '修正指示を入力してください'),
+  image_model: z.enum(['gemini-3.1-flash-image-preview', 'gemini-2.5-pro-preview-image-generation']).default('gemini-3.1-flash-image-preview'),
 })
 
 export async function POST(request: Request) {
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
     const result = await editBannerImage({
       baseImageUrl: parsed.data.base_image_url,
       editInstruction: parsed.data.edit_instruction,
+      imageModel: parsed.data.image_model,
     })
 
     // Upload edited image to S3

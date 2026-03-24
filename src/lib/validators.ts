@@ -76,6 +76,7 @@ export const bannerGenerateSchema = z.object({
   page_context: z.string().optional(),
   reference_image_url: z.string().url().optional(),
   newsletter_id: z.string().uuid().optional(),
+  image_model: z.enum(['gemini-3.1-flash-image-preview', 'gemini-2.5-pro-preview-image-generation']).default('gemini-3.1-flash-image-preview'),
 })
 
 export type LoginInput = z.infer<typeof loginSchema>

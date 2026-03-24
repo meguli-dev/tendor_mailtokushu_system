@@ -3,8 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
 
 // 画像生成モデル（コスト: Pro=$0.134/枚, 3.1 Flash=$0.067/枚, 2.5 Flash=$0.039/枚）
-const IMAGE_MODEL = 'gemini-3.1-flash-image-preview'
-const IMAGE_EDIT_MODEL = 'gemini-2.5-flash-preview-image-generation'
+const DEFAULT_IMAGE_MODEL = 'gemini-3.1-flash-image-preview'
 
 export async function generateBannerImage(params: {
   mainText?: string
@@ -15,9 +14,10 @@ export async function generateBannerImage(params: {
   productImages?: string[]
   referenceImageUrl?: string
   pageContext?: string
+  imageModel?: string
 }): Promise<{ imageData: string; mimeType: string }> {
   const model = genAI.getGenerativeModel({
-    model: IMAGE_MODEL,
+    model: params.imageModel || DEFAULT_IMAGE_MODEL,
     generationConfig: {
       // @ts-expect-error -- responseModalities is supported in v0.24+ but not yet in types
       responseModalities: ['TEXT', 'IMAGE'],
@@ -158,9 +158,10 @@ ${params.pageContext ? `【コンテキスト】${params.pageContext}` : ''}
 export async function editBannerImage(params: {
   baseImageUrl: string
   editInstruction: string
+  imageModel?: string
 }): Promise<{ imageData: string; mimeType: string }> {
   const model = genAI.getGenerativeModel({
-    model: IMAGE_MODEL,
+    model: params.imageModel || DEFAULT_IMAGE_MODEL,
     generationConfig: {
       // @ts-expect-error -- responseModalities is supported in v0.24+ but not yet in types
       responseModalities: ['TEXT', 'IMAGE'],

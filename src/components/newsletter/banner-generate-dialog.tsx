@@ -60,6 +60,9 @@ export function BannerGenerateDialog({
   const [generatedUrl, setGeneratedUrl] = useState('')
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set())
 
+  // Model selection
+  const [imageModel, setImageModel] = useState<'gemini-3.1-flash-image-preview' | 'gemini-2.5-pro-preview-image-generation'>('gemini-3.1-flash-image-preview')
+
   // Edit state
   const [editCount, setEditCount] = useState(0)
   const [editInstruction, setEditInstruction] = useState('')
@@ -152,6 +155,7 @@ export function BannerGenerateDialog({
           reference_image_url: referenceImageUrl || undefined,
           page_context: `メルマガ特集: ${title}`,
           newsletter_id: newsletterId || undefined,
+          image_model: imageModel,
         }),
       })
 
@@ -184,6 +188,7 @@ export function BannerGenerateDialog({
         body: JSON.stringify({
           base_image_url: generatedUrl,
           edit_instruction: editInstruction.trim(),
+          image_model: imageModel,
         }),
       })
 
@@ -262,6 +267,24 @@ export function BannerGenerateDialog({
           {/* Generation settings - collapse after generation */}
           {!generatedUrl && (
             <>
+              {/* モデル選択 */}
+              <div className="space-y-2">
+                <Label>AIモデル</Label>
+                <select
+                  value={imageModel}
+                  onChange={(e) => setImageModel(e.target.value as typeof imageModel)}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="gemini-3.1-flash-image-preview">Gemini 3.1 Flash（通常）</option>
+                  <option value="gemini-2.5-pro-preview-image-generation">Gemini 2.5 Pro（高品質）</option>
+                </select>
+                {imageModel === 'gemini-2.5-pro-preview-image-generation' && (
+                  <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                    ※ 高品質モデルは1回の生成で2枚分を消費します
+                  </p>
+                )}
+              </div>
+
               <div className="space-y-2">
                 <Label>メインテキスト</Label>
                 <Input
