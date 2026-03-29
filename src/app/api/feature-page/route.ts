@@ -26,7 +26,9 @@ export async function POST(request: Request) {
   const body = await request.json()
   const parsed = featurePageSchema.safeParse(body)
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
+    const issue = parsed.error.issues[0]
+    console.error('featurePageSchema validation failed:', JSON.stringify(parsed.error.issues))
+    return NextResponse.json({ error: `${issue.path.join('.')}: ${issue.message}` }, { status: 400 })
   }
 
   const { data, error } = await supabase

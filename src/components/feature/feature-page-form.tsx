@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Plus, ArrowLeft, ArrowRight, Loader2, Sparkles, Code, Trash2, Palette } from 'lucide-react'
+import { Plus, ArrowLeft, ArrowRight, Loader2, Sparkles, Code, Trash2, Palette, ImageIcon, ShoppingBag } from 'lucide-react'
 import { ProductInput, type ProductData } from '@/components/newsletter/product-input'
 import { CopyButton } from '@/components/shared/copy-button'
 import {
@@ -19,7 +19,7 @@ import {
 } from '@/hooks/use-feature-pages'
 import { FEATURE_TEMPLATE_DEFS, PRESET_COLORS } from '@/lib/feature-templates'
 import { toast } from 'sonner'
-import type { FeaturePageWithProducts, FeatureTemplateType, FeaturePageDraftData } from '@/types'
+import type { FeaturePageWithProducts, FeatureTemplateType, FeaturePageDraftData, FeatureContentZoneItem, FeaturePickupProduct } from '@/types'
 
 interface FeaturePageFormProps {
   featurePage?: FeaturePageWithProducts
@@ -112,10 +112,29 @@ export function FeaturePageForm({ featurePage }: FeaturePageFormProps) {
 
   // Template B fields
   const [introText, setIntroText] = useState(draft?.formFields?.introText || '')
+  const [recommendDescriptions, setRecommendDescriptions] = useState<string[]>(draft?.formFields?.recommendDescriptions || [])
+  const [selectionGuideTitle, setSelectionGuideTitle] = useState(draft?.formFields?.selectionGuideTitle || '')
   const [selectionGuideText, setSelectionGuideText] = useState(draft?.formFields?.selectionGuideText || '')
+  const [selectionGuideCards, setSelectionGuideCards] = useState<Array<{ title: string; description: string }>>(
+    draft?.formFields?.selectionGuideCards || []
+  )
 
   // Template C fields
   const [appealText, setAppealText] = useState(draft?.formFields?.appealText || '')
+
+  // 共通: コンテンツゾーン
+  const [contentZone, setContentZone] = useState<FeatureContentZoneItem[]>(
+    draft?.formFields?.contentZone || []
+  )
+
+  // 共通: おすすめ商品（ピックアップ）
+  const [pickupSectionTitle, setPickupSectionTitle] = useState(
+    draft?.formFields?.pickupSectionTitle || 'おすすめ商品'
+  )
+  const [pickupProducts, setPickupProducts] = useState<FeaturePickupProduct[]>(
+    draft?.formFields?.pickupProducts || []
+  )
+  const [scrapingPickupIds, setScrapingPickupIds] = useState<Set<string>>(new Set())
 
   // Step 3: HTML
   const [generatedHtml, setGeneratedHtml] = useState(featurePage?.html_output || '')
@@ -135,7 +154,8 @@ export function FeaturePageForm({ featurePage }: FeaturePageFormProps) {
   }, [pageId, currentStep, title, templateType, themeColor, headerImageUrl, directionMemo,
     ctaText, ctaUrl, badgeText, problemSectionTitle, problemBefore, problemAfter,
     solutionText, mainFeatures, subFeatures, useCases, sizeGuide, faqItems,
-    introText, selectionGuideText, appealText])
+    introText, recommendDescriptions, selectionGuideTitle, selectionGuideText, selectionGuideCards,
+    appealText, contentZone, pickupProducts, pickupSectionTitle])
 
   useEffect(() => {
     if (currentStep !== 2) return
@@ -169,9 +189,18 @@ export function FeaturePageForm({ featurePage }: FeaturePageFormProps) {
         solutionText, mainFeatures, subFeatures, useCases, sizeGuide, faqItems,
       })
     } else if (templateType === 'category') {
-      Object.assign(formFields, { introText, selectionGuideText })
+      Object.assign(formFields, {
+        introText, recommendDescriptions, selectionGuideTitle, selectionGuideText, selectionGuideCards,
+        useCases, faqItems,
+      })
     } else if (templateType === 'simple') {
       Object.assign(formFields, { appealText })
+    }
+    // 共通フィールド
+    if (contentZone.length > 0) formFields.contentZone = contentZone
+    if (pickupProducts.length > 0) {
+      formFields.pickupProducts = pickupProducts
+      formFields.pickupSectionTitle = pickupSectionTitle
     }
     return { formFields, aiGenerated: true }
   }
@@ -182,6 +211,34 @@ export function FeaturePageForm({ featurePage }: FeaturePageFormProps) {
 
   function removeProduct(index: number) {
     setProducts((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  async function handleScrapePickup(itemId: string) {
+    const item = pickupProducts.find(p => p.id === itemId)
+    if (!item?.product_url) { toast.error('URLを入力してください'); return }
+    setScrapingPickupIds(prev => new Set(prev).add(itemId))
+    try {
+      const res = await fetch('/api/product/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_url: item.product_url, auto_upload_s3: true }),
+      })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || '取得に失敗しました')
+      }
+      const data = await res.json()
+      setPickupProducts(prev => prev.map(p => p.id === itemId ? {
+        ...p,
+        product_name: data.product_name || p.product_name,
+        product_image_url: data.s3_image_url || data.original_image_url || p.product_image_url,
+      } : p))
+      toast.success(`${data.product_name} を取得しました`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '取得に失敗しました')
+    } finally {
+      setScrapingPickupIds(prev => { const next = new Set(prev); next.delete(itemId); return next })
+    }
   }
 
   // Step 1 → Step 2: AI content generation
@@ -263,7 +320,11 @@ export function FeaturePageForm({ featurePage }: FeaturePageFormProps) {
       setFaqItems((content.faq as Array<{ question: string; answer: string }>) || [])
     } else if (type === 'category') {
       setIntroText((content.intro_text as string) || '')
-      setSelectionGuideText((content.selection_guide_text as string) || '')
+      setRecommendDescriptions((content.recommend_descriptions as string[]) || [])
+      setSelectionGuideTitle((content.selection_guide_title as string) || '選び方ガイド')
+      setSelectionGuideCards((content.selection_guide_cards as Array<{ title: string; description: string }>) || [])
+      setUseCases((content.use_cases as Array<{ title: string; description: string }>) || [])
+      setFaqItems((content.faq as Array<{ question: string; answer: string }>) || [])
     } else if (type === 'simple') {
       setAppealText((content.appeal_text as string) || '')
     }
@@ -741,10 +802,97 @@ export function FeaturePageForm({ featurePage }: FeaturePageFormProps) {
                   <Textarea value={introText} onChange={(e) => setIntroText(e.target.value)} rows={4} />
                 </CardContent>
               </Card>
+
+              <Card>
+                <CardHeader><CardTitle>おすすめ商品の説明文</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  {recommendDescriptions.map((desc, i) => (
+                    <div key={i} className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">商品{i + 1}の説明</Label>
+                      <Textarea value={desc} rows={2} onChange={(e) => {
+                        const next = [...recommendDescriptions]; next[i] = e.target.value; setRecommendDescriptions(next)
+                      }} />
+                    </div>
+                  ))}
+                  {recommendDescriptions.length === 0 && (
+                    <p className="text-sm text-muted-foreground">商品説明はAI生成後に表示されます</p>
+                  )}
+                </CardContent>
+              </Card>
+
               <Card>
                 <CardHeader><CardTitle>選び方ガイド</CardTitle></CardHeader>
-                <CardContent>
-                  <Textarea value={selectionGuideText} onChange={(e) => setSelectionGuideText(e.target.value)} rows={4} />
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>セクションタイトル</Label>
+                    <Input value={selectionGuideTitle} onChange={(e) => setSelectionGuideTitle(e.target.value)} placeholder="選び方ガイド" />
+                  </div>
+                  {selectionGuideCards.map((card, i) => (
+                    <div key={i} className="flex gap-2 items-start">
+                      <div className="flex-1 space-y-1">
+                        <Input value={card.title} placeholder="ポイントのタイトル" onChange={(e) => {
+                          const next = [...selectionGuideCards]; next[i] = { ...next[i], title: e.target.value }; setSelectionGuideCards(next)
+                        }} />
+                        <Textarea value={card.description} placeholder="説明" rows={2} onChange={(e) => {
+                          const next = [...selectionGuideCards]; next[i] = { ...next[i], description: e.target.value }; setSelectionGuideCards(next)
+                        }} />
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => setSelectionGuideCards(prev => prev.filter((_, idx) => idx !== i))}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button variant="outline" size="sm" onClick={() => setSelectionGuideCards(prev => [...prev, { title: '', description: '' }])}>
+                    <Plus className="mr-1 h-3 w-3" />ポイントを追加
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader><CardTitle>利用シーン</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  {useCases.map((uc, i) => (
+                    <div key={i} className="flex gap-2 items-start">
+                      <div className="flex-1 space-y-1">
+                        <Input value={uc.title} placeholder="シーンタイトル" onChange={(e) => {
+                          const next = [...useCases]; next[i] = { ...next[i], title: e.target.value }; setUseCases(next)
+                        }} />
+                        <Textarea value={uc.description} placeholder="説明" rows={2} onChange={(e) => {
+                          const next = [...useCases]; next[i] = { ...next[i], description: e.target.value }; setUseCases(next)
+                        }} />
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => setUseCases(prev => prev.filter((_, idx) => idx !== i))}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button variant="outline" size="sm" onClick={() => setUseCases(prev => [...prev, { title: '', description: '' }])}>
+                    <Plus className="mr-1 h-3 w-3" />シーンを追加
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader><CardTitle>FAQ</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  {faqItems.map((faq, i) => (
+                    <div key={i} className="flex gap-2 items-start">
+                      <div className="flex-1 space-y-1">
+                        <Input value={faq.question} placeholder="質問" onChange={(e) => {
+                          const next = [...faqItems]; next[i] = { ...next[i], question: e.target.value }; setFaqItems(next)
+                        }} />
+                        <Textarea value={faq.answer} placeholder="回答" rows={2} onChange={(e) => {
+                          const next = [...faqItems]; next[i] = { ...next[i], answer: e.target.value }; setFaqItems(next)
+                        }} />
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => setFaqItems(prev => prev.filter((_, idx) => idx !== i))}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button variant="outline" size="sm" onClick={() => setFaqItems(prev => [...prev, { question: '', answer: '' }])}>
+                    <Plus className="mr-1 h-3 w-3" />追加
+                  </Button>
                 </CardContent>
               </Card>
             </>
@@ -759,6 +907,166 @@ export function FeaturePageForm({ featurePage }: FeaturePageFormProps) {
               </CardContent>
             </Card>
           )}
+
+          {/* おすすめ商品（共通） */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShoppingBag className="h-5 w-5" />
+                おすすめ商品
+              </CardTitle>
+              <CardDescription>「他のおすすめ容器」として紹介する商品を登録（画像・商品名・説明・リンク）</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>セクションタイトル</Label>
+                <Input
+                  value={pickupSectionTitle}
+                  onChange={(e) => setPickupSectionTitle(e.target.value)}
+                  placeholder="おすすめ商品"
+                />
+              </div>
+              {pickupProducts.map((item, i) => {
+                const isScraping = scrapingPickupIds.has(item.id)
+                return (
+                <div key={item.id} className="rounded-lg border p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs text-muted-foreground">商品 {i + 1}</Label>
+                    <Button variant="ghost" size="icon" onClick={() => setPickupProducts(prev => prev.filter(p => p.id !== item.id))}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {/* URL入力 + 自動取得 */}
+                  <div className="flex gap-2">
+                    <Input
+                      value={item.product_url}
+                      placeholder="https://yo-ki-navi.com/product.php?id=..."
+                      className="flex-1"
+                      onChange={(e) => {
+                        setPickupProducts(prev => prev.map(p => p.id === item.id ? { ...p, product_url: e.target.value } : p))
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => handleScrapePickup(item.id)}
+                      disabled={isScraping}
+                    >
+                      {isScraping ? <Loader2 className="h-4 w-4 animate-spin" /> : '取得'}
+                    </Button>
+                  </div>
+                  {/* 取得済み or 手動入力フィールド */}
+                  {item.product_name && (
+                    <div className="flex items-center gap-3 text-sm">
+                      {item.product_image_url && (
+                        <img src={item.product_image_url} alt={item.product_name} className="h-16 w-16 rounded border object-contain flex-shrink-0" />
+                      )}
+                      <span className="font-medium">{item.product_name}</span>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">商品名</Label>
+                      <Input value={item.product_name} placeholder="自動取得 or 手動入力" onChange={(e) => {
+                        setPickupProducts(prev => prev.map(p => p.id === item.id ? { ...p, product_name: e.target.value } : p))
+                      }} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">バッジ（任意）</Label>
+                      <Input value={item.badge} placeholder="例: 人気No.1、NEW" onChange={(e) => {
+                        setPickupProducts(prev => prev.map(p => p.id === item.id ? { ...p, badge: e.target.value } : p))
+                      }} />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">商品画像URL</Label>
+                    <Input value={item.product_image_url} placeholder="自動取得 or 手動入力" onChange={(e) => {
+                      setPickupProducts(prev => prev.map(p => p.id === item.id ? { ...p, product_image_url: e.target.value } : p))
+                    }} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">説明文</Label>
+                    <Textarea value={item.description} rows={2} placeholder="商品の説明・おすすめポイント" onChange={(e) => {
+                      setPickupProducts(prev => prev.map(p => p.id === item.id ? { ...p, description: e.target.value } : p))
+                    }} />
+                  </div>
+                </div>
+                )
+              })}
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => setPickupProducts(prev => [...prev, {
+                  id: crypto.randomUUID(),
+                  product_url: '',
+                  product_name: '',
+                  product_image_url: '',
+                  description: '',
+                  badge: '',
+                }])}
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                おすすめ商品を追加
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* コンテンツゾーン（共通） */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ImageIcon className="h-5 w-5" />
+                コンテンツゾーン
+              </CardTitle>
+              <CardDescription>バナーやリンク付き画像を自由に配置できるエリア（画像・リンク先・コメント）</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {contentZone.map((block, i) => (
+                <div key={block.id} className="rounded-lg border p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs text-muted-foreground">ブロック {i + 1}</Label>
+                    <Button variant="ghost" size="icon" onClick={() => setContentZone(prev => prev.filter(b => b.id !== block.id))}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">画像URL</Label>
+                    <Input value={block.image_url} placeholder="https://..." onChange={(e) => {
+                      setContentZone(prev => prev.map(b => b.id === block.id ? { ...b, image_url: e.target.value } : b))
+                    }} />
+                  </div>
+                  {block.image_url && (
+                    <img src={block.image_url} alt={`コンテンツ${i + 1}`} className="max-h-24 rounded border" />
+                  )}
+                  <div className="space-y-1">
+                    <Label className="text-xs">リンク先URL</Label>
+                    <Input value={block.link_url} placeholder="https://..." onChange={(e) => {
+                      setContentZone(prev => prev.map(b => b.id === block.id ? { ...b, link_url: e.target.value } : b))
+                    }} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">コメント</Label>
+                    <Textarea value={block.comment} rows={2} placeholder="画像の下に表示するテキスト" onChange={(e) => {
+                      setContentZone(prev => prev.map(b => b.id === block.id ? { ...b, comment: e.target.value } : b))
+                    }} />
+                  </div>
+                </div>
+              ))}
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => setContentZone(prev => [...prev, {
+                  id: crypto.randomUUID(),
+                  image_url: '',
+                  link_url: '',
+                  comment: '',
+                }])}
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                コンテンツブロックを追加
+              </Button>
+            </CardContent>
+          </Card>
 
           {/* CTA (共通) */}
           <Card>

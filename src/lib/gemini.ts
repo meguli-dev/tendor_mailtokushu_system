@@ -5,6 +5,18 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
 // 画像生成モデル（コスト: Pro=$0.134/枚, 3.1 Flash=$0.067/枚, 2.5 Flash=$0.039/枚）
 const DEFAULT_IMAGE_MODEL = 'gemini-3.1-flash-image-preview'
 
+export interface BannerTonmanaParams {
+  design_style?: string
+  color_primary?: string
+  color_accent?: string
+  color_background?: string
+  font_style?: string
+  atmosphere?: string
+  ng_elements?: string
+  reference_image_url?: string | null
+  additional_instructions?: string
+}
+
 export async function generateBannerImage(params: {
   mainText?: string
   newsletterTitle: string
@@ -15,6 +27,7 @@ export async function generateBannerImage(params: {
   referenceImageUrl?: string
   pageContext?: string
   imageModel?: string
+  tonmana?: BannerTonmanaParams | null
 }): Promise<{ imageData: string; mimeType: string }> {
   const model = genAI.getGenerativeModel({
     model: params.imageModel || DEFAULT_IMAGE_MODEL,
@@ -31,7 +44,18 @@ export async function generateBannerImage(params: {
     { text: prompt },
   ]
 
-  // Add reference image if provided
+  // Add tonmana reference image if set
+  if (params.tonmana?.reference_image_url) {
+    try {
+      const tonmanaRefPart = await fetchImageAsPart(params.tonmana.reference_image_url)
+      parts.push(tonmanaRefPart)
+      parts.push({ text: '上記はブランドのトンマナ参考画像です。デザインの雰囲気・色使い・レイアウト感を参考にしてください。テキスト・文字・ロゴはコピーしないでください。' })
+    } catch {
+      // Tonmana reference image fetch failed, continue without it
+    }
+  }
+
+  // Add reference image if provided (per-generation)
   if (params.referenceImageUrl) {
     try {
       const refPart = await fetchImageAsPart(params.referenceImageUrl)
@@ -97,11 +121,15 @@ function buildBannerPrompt(params: {
   width: number
   height: number
   pageContext?: string
+  tonmana?: BannerTonmanaParams | null
 }): string {
   const hasMainText = params.mainText && params.mainText.trim()
+  const t = params.tonmana
+
+  // トンマナ設定からデザイン指示を構築
+  const tonmanaBlock = buildTonmanaBlock(t)
 
   if (hasMainText) {
-    // メインテキストが指定されている場合：そのまま使う
     return `あなたはプロのグラフィックデザイナーです。以下の条件でメルマガ用バナー画像を1枚生成してください。
 
 【サイズ】${params.width} x ${params.height}px
@@ -110,12 +138,11 @@ ${params.pageContext ? `【コンテキスト】${params.pageContext}` : ''}
 
 【デザイン要件】
 - 日本語テキストは大きく読みやすく配置
-- 食品容器・テイクアウト向けの清潔感のあるデザイン
 - メインテキストが最も目立つように
 - 商品画像が提供されている場合は、背景を完全に除去して商品本体のみを切り抜いてから配置
-- 背景はテーマに合った色使い（暖色系推奨）
 - プロフェッショナルで洗練された印象
 - 商品の型番（英数字の品番コード）はバナーに含めないこと
+${tonmanaBlock}
 
 【テキストに関する厳守事項】
 - バナーに含めるテキストは上記で指定したもの「だけ」にすること
@@ -126,7 +153,6 @@ ${params.pageContext ? `【コンテキスト】${params.pageContext}` : ''}
 画像のみを生成してください。`
   }
 
-  // メインテキストが空の場合：メルマガタイトルからバナー用テキストを考えて画像生成
   return `あなたはプロのグラフィックデザイナーです。以下の条件でメルマガ用バナー画像を1枚生成してください。
 
 【サイズ】${params.width} x ${params.height}px
@@ -139,12 +165,11 @@ ${params.pageContext ? `【コンテキスト】${params.pageContext}` : ''}
 
 【デザイン要件】
 - 日本語テキストは大きく読みやすく配置
-- 食品容器・テイクアウト向けの清潔感のあるデザイン
 - メインテキストが最も目立つように
 - 商品画像が提供されている場合は、背景を完全に除去して商品本体のみを切り抜いてから配置
-- 背景はテーマに合った色使い（暖色系推奨）
 - プロフェッショナルで洗練された印象
 - 商品の型番（英数字の品番コード）はバナーに含めないこと
+${tonmanaBlock}
 
 【テキストに関する厳守事項】
 - バナーに含めるテキストは生成した1つのキャッチコピーのみにすること
@@ -153,6 +178,61 @@ ${params.pageContext ? `【コンテキスト】${params.pageContext}` : ''}
 - シンプルで文字の少ないバナーを目指すこと
 
 画像のみを生成してください。`
+}
+
+const DESIGN_STYLE_MAP: Record<string, string> = {
+  clean: '清潔感・信頼感のあるクリーンなデザイン',
+  natural: '自然素材感・オーガニックな印象のナチュラルデザイン',
+  pop: '明るく楽しいポップなデザイン',
+  elegant: '高級感・上品さのあるエレガントなデザイン',
+  minimal: 'シンプルで洗練されたミニマルデザイン',
+  warm: '温かみのある親しみやすいデザイン',
+  cool: 'モダンでスタイリッシュなクールデザイン',
+}
+
+const FONT_STYLE_MAP: Record<string, string> = {
+  bold_readable: '太めのゴシック体で視認性を重視',
+  elegant_serif: '品格のある明朝体ベースの上品な文字',
+  casual_round: '柔らかく親しみやすい丸ゴシック系の文字',
+  modern_sans: 'すっきりとした現代的なサンセリフ系の文字',
+  handwritten: '温かみのある手書き風テイストの文字',
+}
+
+const BG_STYLE_MAP: Record<string, string> = {
+  warm: '暖色系（オレンジ・ベージュ・ブラウン等）',
+  cool: '寒色系（ブルー・グレー等）',
+  neutral: 'ニュートラル（白・グレー・ベージュ等）',
+  pastel: 'パステルカラー（柔らかく淡い色合い）',
+  vivid: 'ビビッドカラー（鮮やかで目を引く色合い）',
+}
+
+function buildTonmanaBlock(t?: BannerTonmanaParams | null): string {
+  if (!t) {
+    // デフォルト（トンマナ未設定時）
+    return `- 食品容器・テイクアウト向けの清潔感のあるデザイン
+- 背景はテーマに合った色使い（暖色系推奨）`
+  }
+
+  const lines: string[] = []
+
+  lines.push(`\n【トンマナ（ブランドデザインルール）】`)
+  lines.push(`- デザインスタイル: ${DESIGN_STYLE_MAP[t.design_style || 'clean'] || t.design_style}`)
+  lines.push(`- メインカラー: ${t.color_primary || '#e8690a'}（タイトルや強調部分に使用）`)
+  lines.push(`- アクセントカラー: ${t.color_accent || '#2563eb'}（ボタンやアクセント要素に使用）`)
+  lines.push(`- 背景の色味: ${BG_STYLE_MAP[t.color_background || 'warm'] || t.color_background}`)
+  lines.push(`- フォントスタイル: ${FONT_STYLE_MAP[t.font_style || 'bold_readable'] || t.font_style}`)
+
+  if (t.atmosphere) {
+    lines.push(`- 雰囲気: ${t.atmosphere}`)
+  }
+  if (t.ng_elements) {
+    lines.push(`- 【NG要素・避けること】: ${t.ng_elements}`)
+  }
+  if (t.additional_instructions) {
+    lines.push(`- 【追加ルール】: ${t.additional_instructions}`)
+  }
+
+  return lines.join('\n')
 }
 
 export async function editBannerImage(params: {

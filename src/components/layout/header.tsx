@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { LogOut, Image, LayoutTemplate } from 'lucide-react'
+import { LogOut, Image, LayoutTemplate, Settings } from 'lucide-react'
 import { toast } from 'sonner'
 
 export function Header() {
@@ -32,6 +32,12 @@ export function Header() {
             <Link href="/images">
               <Image className="mr-1 h-4 w-4" />
               画像管理
+            </Link>
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/settings/banner-tonmana">
+              <Settings className="mr-1 h-4 w-4" />
+              トンマナ設定
             </Link>
           </Button>
           <Button variant="ghost" size="sm" onClick={handleLogout}>

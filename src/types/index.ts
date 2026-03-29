@@ -6,6 +6,9 @@ export type FeatureTemplateType = 'new_product' | 'category' | 'simple'
 export type ImageType = 'product' | 'banner' | 'header' | 'other'
 export type BannerMethod = 'gemini' | 'genspark_prompt' | 'manus' | 'manual'
 export type BannerStatus = 'pending' | 'generated' | 'approved' | 'rejected'
+export type BannerDesignStyle = 'clean' | 'natural' | 'pop' | 'elegant' | 'minimal' | 'warm' | 'cool'
+export type BannerFontStyle = 'bold_readable' | 'elegant_serif' | 'casual_round' | 'modern_sans' | 'handwritten'
+export type BannerColorBackground = 'warm' | 'cool' | 'neutral' | 'pastel' | 'vivid'
 
 export interface NewsletterDraftData {
   proposal?: {
@@ -95,6 +98,22 @@ export interface NewsletterTemplate {
   updated_at: string
 }
 
+export interface FeatureContentZoneItem {
+  id: string
+  image_url: string
+  link_url: string
+  comment: string
+}
+
+export interface FeaturePickupProduct {
+  id: string
+  product_url: string
+  product_name: string
+  product_image_url: string
+  description: string
+  badge: string
+}
+
 export interface FeaturePageDraftData {
   formFields?: {
     heroImageUrl?: string
@@ -115,12 +134,19 @@ export interface FeaturePageDraftData {
     sizeGuide?: Array<{ label: string; specs: string; description: string }>
     faqItems?: Array<{ question: string; answer: string }>
     // Template B: カテゴリ特集型
+    recommendDescriptions?: string[]
+    selectionGuideTitle?: string
     selectionGuideText?: string
+    selectionGuideCards?: Array<{ title: string; description: string }>
     // Product categories for Template A
     productCategories?: Array<{
       title: string
       productIndices: number[]
     }>
+    // 共通: コンテンツゾーン & おすすめ商品
+    contentZone?: FeatureContentZoneItem[]
+    pickupProducts?: FeaturePickupProduct[]
+    pickupSectionTitle?: string
   }
   aiGenerated?: boolean
 }
@@ -174,6 +200,22 @@ export interface AppImage {
   width: number | null
   height: number | null
   created_at: string
+}
+
+export interface BannerTonmana {
+  id: string
+  user_id: string
+  design_style: BannerDesignStyle
+  color_primary: string
+  color_accent: string
+  color_background: BannerColorBackground
+  font_style: BannerFontStyle
+  atmosphere: string
+  ng_elements: string
+  reference_image_url: string | null
+  additional_instructions: string
+  created_at: string
+  updated_at: string
 }
 
 export interface BannerGenerationLog {

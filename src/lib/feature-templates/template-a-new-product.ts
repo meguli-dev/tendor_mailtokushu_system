@@ -120,6 +120,8 @@ export function getTemplateA(vars: {
   </div>
   <!--ENDIF:FAQ-->
 
+  {{SHARED_SECTIONS}}
+
 </div>`
 }
 

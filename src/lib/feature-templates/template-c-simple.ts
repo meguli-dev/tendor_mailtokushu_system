@@ -36,6 +36,8 @@ export function getTemplateC(vars: {
     </div>
   </div>
 
+  {{SHARED_SECTIONS}}
+
   <!-- CTA -->
   <div style="text-align:center;margin:48px 0;">
     <a href="{{CTA_URL}}" style="display:inline-block;padding:16px 54px;background:${themeColor};color:#FFFFFF;font-family:'Noto Sans JP',Meiryo,sans-serif;font-size:16px;font-weight:bold;text-decoration:none;border-radius:999px;">{{CTA_TEXT}}</a>

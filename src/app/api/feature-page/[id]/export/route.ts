@@ -4,8 +4,9 @@ import type { FeatureTemplateType, FeaturePageDraftData } from '@/types'
 import {
   computeThemeColors,
   getTemplateA, mainFeatureCard, subFeatureCard, useCaseCard, productCard, sizeGuideCard, faqItem, categoryTitle,
-  getTemplateB, recommendProductCard, gridProductCard,
+  getTemplateB, recommendProductCard, gridProductCard, selectionGuideCard, categoryUseCaseCard, categoryFaqItem,
   getTemplateC, simpleProductCard,
+  pickupSectionHtml, contentZoneSectionHtml,
 } from '@/lib/feature-templates'
 
 export async function POST(
@@ -148,6 +149,9 @@ function buildNewProductHtml(title: string, fields: Fields, products: ProductRow
     .join('\n')
   html = html.replace('{{FAQ_ITEMS}}', faqHtml)
 
+  // 共通セクション挿入（CTA直前）
+  html = insertSharedSections(html, fields, colors.themeColor)
+
   // Handle conditional blocks
   html = processConditionals(html)
 
@@ -162,15 +166,15 @@ function buildCategoryHtml(title: string, fields: Fields, products: ProductRow[]
   html = html.replace('{{INTRO_TEXT}}', fields.introText || '')
   html = html.replace('{{CTA_URL}}', fields.ctaUrl || '#')
   html = html.replace('{{CTA_TEXT}}', fields.ctaText || '商品を見る')
-  html = html.replace('{{SELECTION_GUIDE_TEXT}}', fields.selectionGuideText || '')
 
-  // Recommend products (first 2)
+  // Recommend products (first 2) with AI-generated descriptions
+  const recommendDescs = fields.recommendDescriptions || []
   const recommendHtml = products.slice(0, 2)
-    .map(p => recommendProductCard(
+    .map((p, i) => recommendProductCard(
       p.product_name || '商品',
       p.s3_image_url || '',
       p.product_url,
-      p.description || '',
+      recommendDescs[i] || p.description || '',
       colors.themeColor
     ))
     .join('\n')
@@ -187,6 +191,26 @@ function buildCategoryHtml(title: string, fields: Fields, products: ProductRow[]
     .join('\n')
   html = html.replace('{{PRODUCT_GRID}}', gridHtml)
 
+  // Selection guide cards
+  html = html.replace('{{SELECTION_GUIDE_TITLE}}', fields.selectionGuideTitle || '選び方ガイド')
+  const guideCardsHtml = (fields.selectionGuideCards || [])
+    .map(card => selectionGuideCard(card.title, card.description, colors.themeColor))
+    .join('\n')
+  html = html.replace('{{SELECTION_GUIDE_CARDS}}', guideCardsHtml)
+
+  // Use cases
+  const useCasesHtml = (fields.useCases || [])
+    .map(uc => categoryUseCaseCard(uc.title, uc.description, colors.themeColor))
+    .join('\n')
+  html = html.replace('{{USE_CASES}}', useCasesHtml)
+
+  // FAQ
+  const faqHtml = (fields.faqItems || [])
+    .map(f => categoryFaqItem(f.question, f.answer))
+    .join('\n')
+  html = html.replace('{{FAQ_ITEMS}}', faqHtml)
+
+  html = insertSharedSections(html, fields, colors.themeColor)
   html = processConditionals(html)
   return html
 }
@@ -211,8 +235,40 @@ function buildSimpleHtml(title: string, fields: Fields, products: ProductRow[], 
     .join('\n')
   html = html.replace('{{PRODUCT_LIST}}', productListHtml)
 
+  html = insertSharedSections(html, fields, colors.themeColor)
   html = processConditionals(html)
   return html
+}
+
+/** おすすめ商品 + コンテンツゾーンを {{SHARED_SECTIONS}} プレースホルダーに挿入 */
+function insertSharedSections(html: string, fields: Fields, themeColor: string): string {
+  let sharedHtml = ''
+
+  // おすすめ商品（ピックアップ）
+  const pickupItems = fields.pickupProducts || []
+  if (pickupItems.length > 0) {
+    sharedHtml += pickupSectionHtml(
+      fields.pickupSectionTitle || 'おすすめ商品',
+      pickupItems.map(p => ({
+        product_name: p.product_name || '',
+        product_image_url: p.product_image_url || '',
+        product_url: p.product_url || '#',
+        description: p.description || '',
+        badge: p.badge || '',
+      })),
+      themeColor
+    )
+  }
+
+  // コンテンツゾーン
+  const czBlocks = fields.contentZone || []
+  if (czBlocks.length > 0) {
+    sharedHtml += contentZoneSectionHtml(
+      czBlocks.filter(b => b.image_url || b.comment)
+    )
+  }
+
+  return html.replace('{{SHARED_SECTIONS}}', sharedHtml)
 }
 
 /** 条件ブロックを処理: 値がある→IF/ENDIFコメント除去、値がない→ブロック全体削除 */

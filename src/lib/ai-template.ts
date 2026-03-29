@@ -145,10 +145,36 @@ export async function generateNewsletterWithAI(params: {
     return `おすすめ商品${i + 1}: 名前="${p.product_name || '未設定'}", 画像URL="${img}", リンクURL="${p.product_url}"${tag ? `, バッジ="${tag}"` : ''}`
   }).join('\n')
 
+  const isProductIntro = formFields?.subSection?.type === 'product_intro'
+
+  // 商品紹介モードの場合、テンプレートHTMLからランキング順位バッジを除去する
+  // テンプレートに「1」「2」等の順位バッジがハードコードされていると、
+  // AIがそれに引きずられてランキング形式で出力してしまうため
+  let processedTemplateHtml = templateHtml
+  if (isProductIntro) {
+    // ランキング順位バッジの<td>を除去（丸い番号バッジを含む<td>）
+    // パターン: <td ...><span style="...border-radius:50%...">数字</span></td>
+    processedTemplateHtml = processedTemplateHtml.replace(
+      /<td[^>]*>\s*<span[^>]*border-radius:\s*50%[^>]*>\s*\d+\s*<\/span>\s*<\/td>/gi,
+      ''
+    )
+    // HTMLコメントの「Ranking N」も「Item N」に置換
+    processedTemplateHtml = processedTemplateHtml.replace(
+      /<!--\s*Ranking\s+(\d+)\s*-->/gi,
+      '<!-- Item $1 -->'
+    )
+    // 「Ranking Items」コメントも置換
+    processedTemplateHtml = processedTemplateHtml.replace(
+      /<!--\s*Ranking Items\s*-->/gi,
+      '<!-- Product Items -->'
+    )
+  }
+
   const rankingListText = rankingProducts.map((p, i) => {
     const img = p.s3_image_url || p.product_image_url || ''
     const tag = formFields?.subSection?.tags?.[i] || ''
-    return `ランキング${i + 1}位: 名前="${p.product_name || '未設定'}", 画像URL="${img}", リンクURL="${p.product_url}"${tag ? `, バッジ="${tag}"` : ''}`
+    const prefix = isProductIntro ? `商品紹介${i + 1}` : `ランキング${i + 1}位`
+    return `${prefix}: 名前="${p.product_name || '未設定'}", 画像URL="${img}", リンクURL="${p.product_url}"${tag ? `, バッジ="${tag}"` : ''}`
   }).join('\n')
 
   // フォームフィールドの明示的な値を構築
@@ -194,7 +220,7 @@ export async function generateNewsletterWithAI(params: {
 
 ## テンプレートHTML
 
-${templateHtml}
+${processedTemplateHtml}
 
 ## 特集テーマ（管理名）
 ${theme}
@@ -215,7 +241,7 @@ ${answersText || '（なし）'}
 
 ${productListText || '（おすすめ商品なし）'}
 
-${rankingListText || '（ランキング商品なし）'}
+${rankingListText || (isProductIntro ? '（商品紹介商品なし）' : '（ランキング商品なし）')}
 
 ## 生成ルール
 
@@ -229,10 +255,10 @@ ${rankingListText || '（ランキング商品なし）'}
    - {{PRODUCT_N_URL}} → おすすめ商品N のリンクURL（すべてのaタグのhrefも含む）
    - {{PRODUCT_N_NAME}} → おすすめ商品N の名前
    - {{PRODUCT_N_BADGE}} → おすすめ商品N のバッジ（フォーム設定のタグを使用）
-   - {{RANKING_N_IMAGE}} → ランキングN の画像URL
-   - {{RANKING_N_URL}} → ランキングN のリンクURL（すべてのaタグのhrefも含む）
-   - {{RANKING_N_NAME}} → ランキングN の名前
-   - {{RANKING_N_BADGE}} → ランキングN のバッジ（フォーム設定のタグを使用）
+   - {{RANKING_N_IMAGE}} → ${isProductIntro ? '商品紹介' : 'ランキング'}N の画像URL
+   - {{RANKING_N_URL}} → ${isProductIntro ? '商品紹介' : 'ランキング'}N のリンクURL（すべてのaタグのhrefも含む）
+   - {{RANKING_N_NAME}} → ${isProductIntro ? '商品紹介' : 'ランキング'}N の名前
+   - {{RANKING_N_BADGE}} → ${isProductIntro ? '商品紹介' : 'ランキング'}N のバッジ（フォーム設定のタグを使用）
 
 3. **フォーム設定を反映するもの（最優先）:**
    - {{NEWSLETTER_TITLE}} → メルマガの件名「${newsletterSubject}」を使用（titleタグ、h1等のメイン見出しに使用）。これはメール全体の件名であり、おすすめセクションのタイトルではない。特集テーマ（管理名）とは別物。
@@ -241,27 +267,35 @@ ${rankingListText || '（ランキング商品なし）'}
    - {{FEATURE_DESCRIPTION}} → フォーム設定の特集説明（空なら省略）
    - {{CTA_URL}} → フォーム設定のCTAリンク先URL
    - {{CTA_TEXT}} → フォーム設定のCTAボタンテキスト
-   - {{RANKING_TITLE}} → フォーム設定のランキングタイトル
+   - {{RANKING_TITLE}} → フォーム設定の${isProductIntro ? '商品紹介' : 'ランキング'}タイトル
 
    **重要: おすすめ商品セクションのタイトルにはフォーム設定の「おすすめタイトル」を使用してください。メルマガタイトル（件名）をおすすめセクションのタイトルに使わないでください。これらは別のものです。**
 
 4. **AIが生成するもの:**
    - {{PRODUCT_N_DESCRIPTION}} → 商品名と特集テーマから適切な説明文（1-2文）
-   - {{RANKING_N_DESCRIPTION}} → ランキング商品の説明文
-   - {{RANKING_DESCRIPTION}} → ランキングセクションの説明文
+   - {{RANKING_N_DESCRIPTION}} → ${isProductIntro ? '商品紹介' : 'ランキング'}商品の説明文
+   - {{RANKING_DESCRIPTION}} → ${isProductIntro ? '商品紹介' : 'ランキング'}セクションの説明文
 
-5. 条件ブロック <!--IF:VARIABLE-->...<!--ENDIF:VARIABLE-->:
+5. **${isProductIntro ? '商品紹介モード' : 'ランキングモード'}について:**
+${isProductIntro
+  ? `   - このメルマガでは「商品紹介」モードが選択されています。ランキング（順位）形式ではなく、通常の商品紹介として表示してください。
+   - 「1位」「2位」「3位」などの順位表記は絶対に使わないでください。
+   - セクションタイトルにも「ランキング」という言葉は使わず、フォーム設定のタイトルを使用してください。
+   - 商品説明文も順位を意識した表現（「堂々の1位」等）ではなく、商品の特長を紹介する形式にしてください。`
+  : `   - このメルマガでは「ランキング」モードが選択されています。順位を明示して表示してください。`}
+
+6. 条件ブロック <!--IF:VARIABLE-->...<!--ENDIF:VARIABLE-->:
    - **ヘッダー画像**: フォーム設定で「使用しない」→ <!--IF:HEADER_IMAGE-->ブロック全体を必ず削除
-   - **ランキング**: フォーム設定で「使用しない」→ <!--IF:RANKING_1_NAME-->ブロック全体を必ず削除
+   - **ランキング/商品紹介**: フォーム設定で「使用しない」→ <!--IF:RANKING_1_NAME-->ブロック全体を必ず削除
    - それ以外: 値がある場合 → 内容を残しIF/ENDIFコメントを削除、値がない場合 → ブロック全体を削除
 
-6. **フォーム設定で「使用しない」とされたセクション**: テンプレートに条件ブロックがない場合でも、該当セクションのHTML要素を完全に除去してください。
+7. **フォーム設定で「使用しない」とされたセクション**: テンプレートに条件ブロックがない場合でも、該当セクションのHTML要素を完全に除去してください。
 
-7. **特集タイトル・特集説明がフォームで空の場合**: ユーザーが何も入力していないので、AIが勝手に内容を生成しないでください。プレースホルダーを空にするか、セクションを削除してください。
+8. **特集タイトル・特集説明がフォームで空の場合**: ユーザーが何も入力していないので、AIが勝手に内容を生成しないでください。プレースホルダーを空にするか、セクションを削除してください。
 
-8. 文章のトーン: 容器なびのBtoB向けメルマガとして丁寧だが親しみやすい文体
+9. 文章のトーン: 容器なびのBtoB向けメルマガとして丁寧だが親しみやすい文体
 
-9. **出力はHTMLコードのみ**を返してください。\`\`\`html等のマークダウン記法は含めないでください。`
+10. **出力はHTMLコードのみ**を返してください。\`\`\`html等のマークダウン記法は含めないでください。`
 
   const response = await generateText(prompt)
 

@@ -33,6 +33,13 @@ export async function POST(request: Request) {
     const used = count || 0
     const isOverLimit = used >= MONTHLY_LIMIT
 
+    // トンマナ設定を取得
+    const { data: tonmana } = await supabase
+      .from('banner_tonmana')
+      .select('*')
+      .eq('user_id', user.id)
+      .single()
+
     const result = await generateBannerImage({
       mainText: parsed.data.main_text,
       newsletterTitle: parsed.data.newsletter_title,
@@ -43,6 +50,7 @@ export async function POST(request: Request) {
       referenceImageUrl: parsed.data.reference_image_url,
       pageContext: parsed.data.page_context,
       imageModel: parsed.data.image_model,
+      tonmana: tonmana || null,
     })
 
     // Upload generated image to S3
