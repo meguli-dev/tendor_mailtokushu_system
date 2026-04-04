@@ -40,8 +40,8 @@ export async function uploadToS3(
     })
   )
 
-  // Generate a presigned URL (valid for 7 days)
-  const s3Url = await getPresignedUrl(s3Key)
+  // Use public URL (permanent, no expiration)
+  const s3Url = getPublicUrl(s3Key)
 
   return { s3Key, s3Url }
 }

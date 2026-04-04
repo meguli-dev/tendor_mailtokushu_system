@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getPublicUrl } from '@/lib/s3'
 import { NextResponse } from 'next/server'
 
 export async function GET() {
@@ -12,5 +13,11 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json(data)
+  // Ensure all images use public URLs (fixes expired presigned URLs)
+  const images = data?.map((img) => ({
+    ...img,
+    s3_url: img.s3_key ? getPublicUrl(img.s3_key) : img.s3_url,
+  }))
+
+  return NextResponse.json(images)
 }
