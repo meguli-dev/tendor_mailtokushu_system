@@ -2,6 +2,11 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
+  // MCPエンドポイントはSupabase Authではなく専用Bearerキーで認証する（route側で検証）
+  if (request.nextUrl.pathname.startsWith('/api/mcp')) {
+    return NextResponse.next({ request })
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
