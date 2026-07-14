@@ -102,10 +102,15 @@ export async function editBannerImageOpenAI(params: {
   baseImageUrl: string
   editInstruction: string
   imageModel?: string
+  width?: number
+  height?: number
 }): Promise<{ imageData: string; mimeType: string }> {
   const model = params.imageModel || 'gpt-image-2'
   const form = new FormData()
   form.append('model', model)
+  if (params.width && params.height) {
+    form.append('size', snapSize(params.width, params.height))
+  }
   form.append('prompt', `以下の画像を編集してください。元の画像のデザイン・レイアウト・色合いを忠実に保持したまま、指定された修正点のみを変更してください。
 
 【修正指示】

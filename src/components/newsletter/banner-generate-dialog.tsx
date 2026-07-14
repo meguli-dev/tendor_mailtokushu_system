@@ -59,6 +59,10 @@ export function BannerGenerateDialog({
   const [mainText, setMainText] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedUrl, setGeneratedUrl] = useState('')
+  const [secondUrl, setSecondUrl] = useState('')
+  const [useSecondSize, setUseSecondSize] = useState(false)
+  const [secondWidth, setSecondWidth] = useState(1200)
+  const [secondHeight, setSecondHeight] = useState(628)
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set())
 
   // Model selection
@@ -105,6 +109,7 @@ export function BannerGenerateDialog({
       setEditCount(0)
       setEditInstruction('')
       setGeneratedUrl('')
+      setSecondUrl('')
       setAppliedToHtml(false)
       // 使用量を取得
       fetch('/api/banner/usage')
@@ -131,6 +136,7 @@ export function BannerGenerateDialog({
   async function handleGenerate() {
     setIsGenerating(true)
     setGeneratedUrl('')
+    setSecondUrl('')
     setEditCount(0)
     setEditInstruction('')
     setAppliedToHtml(false)
@@ -157,6 +163,7 @@ export function BannerGenerateDialog({
           page_context: `メルマガ特集: ${title}`,
           newsletter_id: newsletterId || undefined,
           image_model: imageModel,
+          second_size: useSecondSize ? { width: secondWidth, height: secondHeight } : undefined,
         }),
       })
 
@@ -167,8 +174,9 @@ export function BannerGenerateDialog({
 
       const data = await res.json()
       setGeneratedUrl(data.s3Url)
+      if (data.secondS3Url) setSecondUrl(data.secondS3Url)
       if (data.usage) setUsage(data.usage)
-      toast.success('バナー画像を生成しました')
+      toast.success(data.secondS3Url ? 'バナー画像を2サイズ生成しました' : 'バナー画像を生成しました')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'バナー生成に失敗しました')
     } finally {
@@ -351,6 +359,62 @@ export function BannerGenerateDialog({
                 </div>
               </div>
 
+              {/* 2つ目のサイズ（同時生成） */}
+              <div className="space-y-2 rounded-lg border border-dashed p-3">
+                <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={useSecondSize}
+                    onChange={(e) => setUseSecondSize(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  同じテイストでもう1サイズ同時生成（特集ページ用など）
+                </label>
+                {useSecondSize && (
+                  <>
+                    <div className="flex gap-2 flex-wrap">
+                      {[
+                        { label: '特集ヒーロー', w: 1200, h: 628 },
+                        { label: '横長バナー', w: 800, h: 400 },
+                        { label: '正方形', w: 800, h: 800 },
+                        { label: '縦長', w: 600, h: 800 },
+                      ].map((preset) => (
+                        <Button
+                          key={preset.label}
+                          type="button"
+                          variant={secondWidth === preset.w && secondHeight === preset.h ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => { setSecondWidth(preset.w); setSecondHeight(preset.h) }}
+                        >
+                          {preset.label} ({preset.w}x{preset.h})
+                        </Button>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">幅 (px)</Label>
+                        <Input
+                          type="number"
+                          value={secondWidth}
+                          onChange={(e) => setSecondWidth(parseInt(e.target.value) || 1200)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">高さ (px)</Label>
+                        <Input
+                          type="number"
+                          value={secondHeight}
+                          onChange={(e) => setSecondHeight(parseInt(e.target.value) || 628)}
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      1枚目のデザインを維持したまま別サイズに再構成します（生成枚数は2枚分カウントされます）
+                    </p>
+                  </>
+                )}
+              </div>
+
               {/* Product image selection */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -441,6 +505,28 @@ export function BannerGenerateDialog({
                 </div>
               </div>
 
+              {/* 2つ目のサイズの結果 */}
+              {secondUrl && (
+                <div className="space-y-3 rounded-lg border p-3">
+                  <Label>2つ目のサイズ（{secondWidth}x{secondHeight}）</Label>
+                  <img
+                    src={secondUrl}
+                    alt="生成されたバナー（2つ目のサイズ）"
+                    className="w-full rounded border"
+                  />
+                  <div className="flex gap-2 flex-wrap">
+                    <CopyButton text={secondUrl} label="URLをコピー" />
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={secondUrl} download="banner-2nd.png" target="_blank" rel="noopener noreferrer">
+                        <Download className="mr-1 h-4 w-4" />
+                        ダウンロード
+                      </a>
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">※ 編集（修正指示）は1枚目にのみ適用されます</p>
+                </div>
+              )}
+
               {/* Edit section */}
               {editCount < MAX_EDITS && (
                 <div className="space-y-3 rounded-lg border border-dashed p-3">
@@ -492,6 +578,7 @@ export function BannerGenerateDialog({
               variant="outline"
               onClick={() => {
                 setGeneratedUrl('')
+                setSecondUrl('')
                 setEditCount(0)
                 setEditInstruction('')
                 setAppliedToHtml(false)

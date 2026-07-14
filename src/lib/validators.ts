@@ -78,6 +78,11 @@ export const bannerGenerateSchema = z.object({
   reference_image_url: z.string().url().optional(),
   newsletter_id: z.string().uuid().optional(),
   image_model: z.enum(IMAGE_MODEL_IDS).default(DEFAULT_IMAGE_MODEL),
+  // 同じテイストで同時生成する2つ目のサイズ（任意）
+  second_size: z.object({
+    width: z.number().int().min(100).max(4096),
+    height: z.number().int().min(100).max(4096),
+  }).optional(),
 })
 
 export type LoginInput = z.infer<typeof loginSchema>
