@@ -2,8 +2,8 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  // MCPエンドポイントはSupabase Authではなく専用Bearerキーで認証する（route側で検証）
-  if (request.nextUrl.pathname.startsWith('/api/mcp')) {
+  // MCP / GPTs エンドポイントはSupabase Authではなく専用Bearerキーで認証する（route側で検証）
+  if (request.nextUrl.pathname.startsWith('/api/mcp') || request.nextUrl.pathname.startsWith('/api/gpt')) {
     return NextResponse.next({ request })
   }
 
