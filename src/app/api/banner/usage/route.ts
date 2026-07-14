@@ -14,9 +14,9 @@ export async function GET() {
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
-  const { count, error } = await supabase
+  const { data: logs, error } = await supabase
     .from('banner_generation_logs')
-    .select('*', { count: 'exact', head: true })
+    .select('units')
     .eq('user_id', user.id)
     .eq('is_edit', false)
     .gte('created_at', monthStart)
@@ -25,7 +25,7 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  const used = count || 0
+  const used = (logs || []).reduce((sum, l) => sum + (l.units ?? 1), 0)
   const remaining = Math.max(0, MONTHLY_LIMIT - used)
   const isOverLimit = used >= MONTHLY_LIMIT
 

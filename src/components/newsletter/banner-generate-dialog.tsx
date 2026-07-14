@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Loader2, Download, ImageIcon, Check, PenLine, RotateCcw, FileCode, AlertTriangle } from 'lucide-react'
 import { CopyButton } from '@/components/shared/copy-button'
 import { toast } from 'sonner'
+import { IMAGE_MODELS, DEFAULT_IMAGE_MODEL, imageModelDef, type ImageModelId } from '@/lib/image-models'
 
 interface ProductData {
   product_url: string
@@ -61,7 +62,7 @@ export function BannerGenerateDialog({
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set())
 
   // Model selection
-  const [imageModel, setImageModel] = useState<'gemini-3.1-flash-image-preview' | 'gemini-3-pro-image-preview'>('gemini-3.1-flash-image-preview')
+  const [imageModel, setImageModel] = useState<ImageModelId>(DEFAULT_IMAGE_MODEL)
 
   // Edit state
   const [editCount, setEditCount] = useState(0)
@@ -275,12 +276,13 @@ export function BannerGenerateDialog({
                   onChange={(e) => setImageModel(e.target.value as typeof imageModel)}
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
-                  <option value="gemini-3.1-flash-image-preview">Gemini 3.1 Flash（通常）</option>
-                  <option value="gemini-3-pro-image-preview">Gemini 3 Pro（高品質）</option>
+                  {IMAGE_MODELS.map((m) => (
+                    <option key={m.id} value={m.id}>{m.label}</option>
+                  ))}
                 </select>
-                {imageModel === 'gemini-3-pro-image-preview' && (
+                {imageModelDef(imageModel).units > 1 && (
                   <p className="text-xs text-yellow-600 dark:text-yellow-400">
-                    ※ 高品質モデルは1回の生成で2枚分を消費します
+                    ※ このモデルは1回の生成で{imageModelDef(imageModel).units}枚分を消費します
                   </p>
                 )}
               </div>

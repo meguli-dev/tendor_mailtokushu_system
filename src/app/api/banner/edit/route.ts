@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { editBannerImage } from '@/lib/gemini'
+import { editBannerImageOpenAI } from '@/lib/openai-image'
+import { IMAGE_MODEL_IDS, DEFAULT_IMAGE_MODEL, imageModelDef } from '@/lib/image-models'
 import { uploadToS3 } from '@/lib/s3'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -7,7 +9,7 @@ import { z } from 'zod'
 const editSchema = z.object({
   base_image_url: z.string().min(1),
   edit_instruction: z.string().min(1, '修正指示を入力してください'),
-  image_model: z.enum(['gemini-3.1-flash-image-preview', 'gemini-3-pro-image-preview']).default('gemini-3.1-flash-image-preview'),
+  image_model: z.enum(IMAGE_MODEL_IDS).default(DEFAULT_IMAGE_MODEL),
 })
 
 export async function POST(request: Request) {
@@ -24,11 +26,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
     }
 
-    const result = await editBannerImage({
+    const modelDef = imageModelDef(parsed.data.image_model)
+    const editParams = {
       baseImageUrl: parsed.data.base_image_url,
       editInstruction: parsed.data.edit_instruction,
       imageModel: parsed.data.image_model,
-    })
+    }
+    const result = modelDef.provider === 'openai'
+      ? await editBannerImageOpenAI(editParams)
+      : await editBannerImage(editParams)
 
     // Upload edited image to S3
     const ext = result.mimeType === 'image/png' ? 'png' : 'jpg'
@@ -53,7 +59,7 @@ export async function POST(request: Request) {
     // Log edit (is_edit=true, カウント対象外)
     await supabase.from('banner_generation_logs').insert({
       user_id: user.id,
-      method: 'gemini',
+      method: modelDef.provider,
       prompt: parsed.data.edit_instruction,
       input_params: parsed.data,
       result_image_url: s3Url,

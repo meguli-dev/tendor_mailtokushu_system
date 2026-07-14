@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { IMAGE_MODEL_IDS, DEFAULT_IMAGE_MODEL } from './image-models'
 
 export const loginSchema = z.object({
   email: z.string().email('有効なメールアドレスを入力してください'),
@@ -76,7 +77,7 @@ export const bannerGenerateSchema = z.object({
   page_context: z.string().optional(),
   reference_image_url: z.string().url().optional(),
   newsletter_id: z.string().uuid().optional(),
-  image_model: z.enum(['gemini-3.1-flash-image-preview', 'gemini-3-pro-image-preview']).default('gemini-3.1-flash-image-preview'),
+  image_model: z.enum(IMAGE_MODEL_IDS).default(DEFAULT_IMAGE_MODEL),
 })
 
 export type LoginInput = z.infer<typeof loginSchema>

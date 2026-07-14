@@ -114,7 +114,7 @@ async function fetchImageAsPart(url: string) {
   }
 }
 
-function buildBannerPrompt(params: {
+export function buildBannerPrompt(params: {
   mainText?: string
   newsletterTitle: string
   subText?: string
