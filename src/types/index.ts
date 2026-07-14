@@ -53,6 +53,15 @@ export interface NewsletterDraftData {
     directionMemo?: string
   }
   contentZone?: Array<{ id: string; image_url: string; link_url: string; text: string }>
+  subSectionProducts?: Array<{
+    product_url: string
+    product_name: string | null
+    product_image_url: string | null
+    s3_image_url: string | null
+    sort_order: number
+    is_ranking: boolean
+    rank_position: number | null
+  }>
 }
 
 export interface Newsletter {
@@ -143,6 +152,10 @@ export interface FeaturePageDraftData {
       title: string
       productIndices: number[]
     }>
+    // Template A: 選び方セクションのタイトル（AI生成）
+    sizeGuideTitle?: string
+    // Template C: 商品説明文（AI生成、商品と同順）
+    productDescriptions?: string[]
     // 共通: コンテンツゾーン & おすすめ商品
     contentZone?: FeatureContentZoneItem[]
     pickupProducts?: FeaturePickupProduct[]

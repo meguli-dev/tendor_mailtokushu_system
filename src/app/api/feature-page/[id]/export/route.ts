@@ -137,7 +137,7 @@ function buildNewProductHtml(title: string, fields: Fields, products: ProductRow
   html = html.replace('{{USE_CASES}}', useCasesHtml)
 
   // Size guide
-  html = html.replace('{{SIZE_GUIDE_TITLE}}', fields.sizeGuide?.length ? (fields.directionMemo || 'サイズの選び方') : '')
+  html = html.replace('{{SIZE_GUIDE_TITLE}}', fields.sizeGuide?.length ? (fields.sizeGuideTitle || 'サイズの選び方') : '')
   const sizeGuideHtml = (fields.sizeGuide || [])
     .map(sg => sizeGuideCard(sg.label, sg.specs, sg.description, colors.themeColor))
     .join('\n')

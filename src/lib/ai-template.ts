@@ -39,6 +39,7 @@ export async function analyzeHtmlToTemplate(rawHtml: string): Promise<{
    - メインCTAボタンのURL → {{CTA_URL}}
    - メインCTAボタンのテキスト → {{CTA_TEXT}}
 3. ヘッダー画像部分は条件ブロックで囲んでください: <!--IF:HEADER_IMAGE-->...<!--ENDIF:HEADER_IMAGE-->
+3-2. 通常商品（おすすめ）の各商品カード全体を、必ずマーカーコメントで囲んでください: <!--PRODUCT_CARD_N_START-->（カードのHTML）<!--PRODUCT_CARD_N_END-->（Nは商品番号）。後工程で商品数に応じてカードを複製するために使います。
 4. ランキングセクション全体も条件ブロックで囲んでください: <!--IF:RANKING_1_NAME-->...<!--ENDIF:RANKING_1_NAME-->
 5. フッター部分（会社情報、SNSリンク、配信停止リンク等）はそのまま保持してください。
 
@@ -75,6 +76,98 @@ ${rawHtml}`
     product_count: parsed.product_count || 2,
     has_ranking: parsed.has_ranking || false,
     description: parsed.description || '',
+  }
+}
+
+/**
+ * テンプレートの商品枠（{{PRODUCT_N_*}}）を商品数に合わせて拡張する。
+ * 枠が足りない場合、最後の商品カードブロックを複製して番号を振り直す。
+ * カードの境界は <!--PRODUCT_CARD_N_START/END--> マーカー、
+ * なければ最後の枠のプレースホルダーを包含する最小のバランスした要素で判定する。
+ */
+export function expandProductSlots(
+  templateHtml: string,
+  productCount: number
+): { html: string; slotCount: number; expanded: boolean } {
+  const slotNumbers = [...templateHtml.matchAll(/\{\{PRODUCT_(\d+)_/g)].map(m => parseInt(m[1], 10))
+  const maxSlot = slotNumbers.length > 0 ? Math.max(...slotNumbers) : 0
+  if (maxSlot === 0 || productCount <= maxSlot) {
+    return { html: templateHtml, slotCount: maxSlot, expanded: false }
+  }
+
+  const renumber = (block: string, n: number) =>
+    block
+      .replace(new RegExp(`\\{\\{PRODUCT_${maxSlot}_`, 'g'), `{{PRODUCT_${n}_`)
+      .replace(new RegExp(`PRODUCT_CARD_${maxSlot}_(START|END)`, 'g'), `PRODUCT_CARD_${n}_$1`)
+
+  // 1) マーカーコメント方式
+  const markerRe = new RegExp(
+    `<!--PRODUCT_CARD_${maxSlot}_START-->[\\s\\S]*?<!--PRODUCT_CARD_${maxSlot}_END-->`
+  )
+  const markerMatch = templateHtml.match(markerRe)
+  if (markerMatch && markerMatch.index !== undefined) {
+    const block = markerMatch[0]
+    let extra = ''
+    for (let n = maxSlot + 1; n <= productCount; n++) extra += '\n' + renumber(block, n)
+    const insertAt = markerMatch.index + block.length
+    return {
+      html: templateHtml.slice(0, insertAt) + extra + templateHtml.slice(insertAt),
+      slotCount: maxSlot,
+      expanded: true,
+    }
+  }
+
+  // 2) フォールバック: 最後の枠の全プレースホルダーを包含する最小のバランスした要素を探す
+  const placeholderRe = new RegExp(`\\{\\{PRODUCT_${maxSlot}_[A-Z_]+\\}\\}`, 'g')
+  const positions = [...templateHtml.matchAll(placeholderRe)].map(m => m.index as number)
+  if (positions.length === 0) return { html: templateHtml, slotCount: maxSlot, expanded: false }
+  const firstIdx = Math.min(...positions)
+  const lastIdx = Math.max(...positions)
+
+  const findBalancedEnd = (html: string, openStart: number, tag: string): number => {
+    const tokenRe = new RegExp(`<${tag}(?=[\\s>])[^>]*>|</${tag}>`, 'gi')
+    tokenRe.lastIndex = openStart
+    let depth = 0
+    let m: RegExpExecArray | null
+    while ((m = tokenRe.exec(html)) !== null) {
+      if (m[0][1] === '/') {
+        depth--
+        if (depth === 0) return m.index + m[0].length
+      } else {
+        depth++
+      }
+    }
+    return -1
+  }
+
+  let best: { start: number; end: number } | null = null
+  for (const tag of ['tr', 'td', 'table', 'div']) {
+    const openRe = new RegExp(`<${tag}(?=[\\s>])`, 'gi')
+    let m: RegExpExecArray | null
+    while ((m = openRe.exec(templateHtml)) !== null && m.index < firstIdx) {
+      const end = findBalancedEnd(templateHtml, m.index, tag)
+      if (end > lastIdx) {
+        const block = templateHtml.slice(m.index, end)
+        // 他の商品枠を含むブロックは不可（カード単体でない）
+        const others = [...block.matchAll(/\{\{PRODUCT_(\d+)_/g)].some(
+          x => parseInt(x[1], 10) !== maxSlot
+        )
+        if (!others && (!best || end - m.index < best.end - best.start)) {
+          best = { start: m.index, end }
+        }
+      }
+    }
+  }
+
+  if (!best) return { html: templateHtml, slotCount: maxSlot, expanded: false }
+
+  const block = templateHtml.slice(best.start, best.end)
+  let extra = ''
+  for (let n = maxSlot + 1; n <= productCount; n++) extra += '\n' + renumber(block, n)
+  return {
+    html: templateHtml.slice(0, best.end) + extra + templateHtml.slice(best.end),
+    slotCount: maxSlot,
+    expanded: true,
   }
 }
 
@@ -150,7 +243,13 @@ export async function generateNewsletterWithAI(params: {
   // 商品紹介モードの場合、テンプレートHTMLからランキング順位バッジを除去する
   // テンプレートに「1」「2」等の順位バッジがハードコードされていると、
   // AIがそれに引きずられてランキング形式で出力してしまうため
-  let processedTemplateHtml = templateHtml
+  // おすすめ商品の枠数をテンプレート側で商品数に合わせて拡張（2枠固定テンプレ対策）
+  const { html: expandedTemplateHtml, expanded: slotsExpanded } = expandProductSlots(
+    templateHtml,
+    recommendProducts.length
+  )
+
+  let processedTemplateHtml = expandedTemplateHtml
   if (isProductIntro) {
     // ランキング順位バッジの<td>を除去（丸い番号バッジを含む<td>）
     // パターン: <td ...><span style="...border-radius:50%...">数字</span></td>
@@ -210,6 +309,16 @@ export async function generateNewsletterWithAI(params: {
   if (formFields?.feature?.description) {
     formFieldsText.push(`特集説明: ${formFields.feature.description}`)
   }
+  const contentZoneItems = formFields?.contentZone?.filter(
+    z => z.image_url || z.link_url || z.text
+  ) || []
+  if (contentZoneItems.length > 0) {
+    formFieldsText.push(`コンテンツゾーン: 使用する（${contentZoneItems.length}件、下記参照）`)
+  }
+
+  const contentZoneText = contentZoneItems.map((z, i) =>
+    `コンテンツ${i + 1}: 画像URL="${z.image_url || 'なし'}", リンクURL="${z.link_url || 'なし'}", テキスト="${z.text || 'なし'}"`
+  ).join('\n')
 
   const answersText = Object.entries(answers)
     .map(([key, value]) => `- ${key}: ${value}`)
@@ -242,6 +351,10 @@ ${answersText || '（なし）'}
 ${productListText || '（おすすめ商品なし）'}
 
 ${rankingListText || (isProductIntro ? '（商品紹介商品なし）' : '（ランキング商品なし）')}
+
+${contentZoneText ? `## コンテンツゾーン（フォーム設定・必ず反映すること）
+
+${contentZoneText}` : ''}
 
 ## 生成ルール
 
@@ -293,9 +406,13 @@ ${isProductIntro
 
 8. **特集タイトル・特集説明がフォームで空の場合**: ユーザーが何も入力していないので、AIが勝手に内容を生成しないでください。プレースホルダーを空にするか、セクションを削除してください。
 
-9. 文章のトーン: 容器なびのBtoB向けメルマガとして丁寧だが親しみやすい文体
+9. **おすすめ商品は${recommendProducts.length}個すべてを必ず出力に含めてください。**${slotsExpanded ? 'テンプレートには商品数分の枠を用意済みです。すべての{{PRODUCT_N_*}}を対応する商品データで置換してください。' : `テンプレートの商品枠が${recommendProducts.length}個より少ない場合は、最後の商品カードと同じHTML構造を複製して全商品を表示してください。`}商品を勝手に省略してはいけません。
 
-10. **出力はHTMLコードのみ**を返してください。\`\`\`html等のマークダウン記法は含めないでください。`
+10. **コンテンツゾーン**: 上記「コンテンツゾーン」の指定がある場合、メインコンテンツの後（フッターの前）に、テンプレートのデザインに合わせたセクションとして挿入してください。各コンテンツは画像（リンクURLへのaタグで囲む）とその下にテキストを表示する構成です。画像がない場合はテキストとリンクのみ。指定がない場合は何も挿入しないでください。
+
+11. 文章のトーン: 容器なびのBtoB向けメルマガとして丁寧だが親しみやすい文体
+
+12. **出力はHTMLコードのみ**を返してください。\`\`\`html等のマークダウン記法は含めないでください。`
 
   const response = await generateText(prompt)
 
@@ -305,6 +422,9 @@ ${isProductIntro
   } else if (html.startsWith('```')) {
     html = html.replace(/^```\s*/, '').replace(/\s*```$/, '')
   }
+
+  // 内部用マーカーコメントを最終HTMLから除去
+  html = html.replace(/<!--PRODUCT_CARD_\d+_(START|END)-->/g, '')
 
   return html
 }

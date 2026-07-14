@@ -109,6 +109,7 @@ export function FeaturePageForm({ featurePage }: FeaturePageFormProps) {
   const [faqItems, setFaqItems] = useState<Array<{ question: string; answer: string }>>(
     draft?.formFields?.faqItems || []
   )
+  const [sizeGuideTitle, setSizeGuideTitle] = useState(draft?.formFields?.sizeGuideTitle || '')
 
   // Template B fields
   const [introText, setIntroText] = useState(draft?.formFields?.introText || '')
@@ -121,6 +122,9 @@ export function FeaturePageForm({ featurePage }: FeaturePageFormProps) {
 
   // Template C fields
   const [appealText, setAppealText] = useState(draft?.formFields?.appealText || '')
+  const [productDescriptions, setProductDescriptions] = useState<string[]>(
+    draft?.formFields?.productDescriptions || []
+  )
 
   // 共通: コンテンツゾーン
   const [contentZone, setContentZone] = useState<FeatureContentZoneItem[]>(
@@ -153,9 +157,9 @@ export function FeaturePageForm({ featurePage }: FeaturePageFormProps) {
     }
   }, [pageId, currentStep, title, templateType, themeColor, headerImageUrl, directionMemo,
     ctaText, ctaUrl, badgeText, problemSectionTitle, problemBefore, problemAfter,
-    solutionText, mainFeatures, subFeatures, useCases, sizeGuide, faqItems,
+    solutionText, mainFeatures, subFeatures, useCases, sizeGuide, sizeGuideTitle, faqItems,
     introText, recommendDescriptions, selectionGuideTitle, selectionGuideText, selectionGuideCards,
-    appealText, contentZone, pickupProducts, pickupSectionTitle])
+    appealText, productDescriptions, contentZone, pickupProducts, pickupSectionTitle])
 
   useEffect(() => {
     if (currentStep !== 2) return
@@ -186,7 +190,7 @@ export function FeaturePageForm({ featurePage }: FeaturePageFormProps) {
     if (templateType === 'new_product') {
       Object.assign(formFields, {
         badgeText, problemSectionTitle, problemBefore, problemAfter,
-        solutionText, mainFeatures, subFeatures, useCases, sizeGuide, faqItems,
+        solutionText, mainFeatures, subFeatures, useCases, sizeGuide, sizeGuideTitle, faqItems,
       })
     } else if (templateType === 'category') {
       Object.assign(formFields, {
@@ -194,7 +198,7 @@ export function FeaturePageForm({ featurePage }: FeaturePageFormProps) {
         useCases, faqItems,
       })
     } else if (templateType === 'simple') {
-      Object.assign(formFields, { appealText })
+      Object.assign(formFields, { appealText, productDescriptions })
     }
     // 共通フィールド
     if (contentZone.length > 0) formFields.contentZone = contentZone
@@ -317,6 +321,7 @@ export function FeaturePageForm({ featurePage }: FeaturePageFormProps) {
       setSubFeatures((content.sub_features as string[]) || [])
       setUseCases((content.use_cases as Array<{ title: string; description: string }>) || [])
       setSizeGuide((content.size_guide as Array<{ label: string; specs: string; description: string }>) || [])
+      setSizeGuideTitle((content.size_guide_title as string) || 'サイズの選び方')
       setFaqItems((content.faq as Array<{ question: string; answer: string }>) || [])
     } else if (type === 'category') {
       setIntroText((content.intro_text as string) || '')
@@ -327,6 +332,7 @@ export function FeaturePageForm({ featurePage }: FeaturePageFormProps) {
       setFaqItems((content.faq as Array<{ question: string; answer: string }>) || [])
     } else if (type === 'simple') {
       setAppealText((content.appeal_text as string) || '')
+      setProductDescriptions((content.product_descriptions as string[]) || [])
     }
   }
 
@@ -350,7 +356,7 @@ export function FeaturePageForm({ featurePage }: FeaturePageFormProps) {
             product_url: p.product_url,
             product_name: p.product_name,
             s3_image_url: p.s3_image_url,
-            description: null,
+            description: productDescriptions[i] || null,
             sort_order: i,
           })),
         },

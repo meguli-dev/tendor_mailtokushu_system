@@ -162,6 +162,8 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
     (draft?.formFields?.sectionType as SectionType) || 'ranking'
   )
   const [subSectionProducts, setSubSectionProducts] = useState<ProductData[]>(() => {
+    // draft_data（Step2の自動保存）を最優先で復元
+    if (draft?.subSectionProducts?.length) return draft.subSectionProducts
     if (!newsletter?.products) return []
     return newsletter.products
       .filter(p => p.is_ranking)
@@ -235,6 +237,10 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
   }
 
   function addProduct() {
+    if (products.length >= MAX_PRODUCTS) {
+      toast.error(`おすすめ商品は最大${MAX_PRODUCTS}件までです`)
+      return
+    }
     setProducts((prev) => [...prev, { ...emptyProduct, sort_order: prev.length }])
   }
 
@@ -373,6 +379,7 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
         ...formFieldsOverride,
       },
       contentZone,
+      subSectionProducts,
     }
 
     const res = await fetch(`/api/newsletter/${id}`, {
@@ -382,7 +389,9 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
     })
     if (!res.ok) {
       console.error('draft_data save failed:', await res.text())
+      return false
     }
+    return true
   }
 
   // Step 2 の自動保存: フォーム変更時にデバウンスで保存 + ページ離脱時にも保存
@@ -405,7 +414,7 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
   }, [currentStep, newsletterId, proposal, answers, useHeader, headerImageUrl, greeting,
       recommendTitle, recommendTags, useSubSection, sectionType, subSectionTitle,
       subSectionTags, ctaButtonText, ctaButtonUrl, featureTitle, featureDescription,
-      directionMemo, contentZone])
+      directionMemo, contentZone, subSectionProducts])
 
   // Step 2 離脱時の保存関数
   const saveDraftBeforeLeave = useCallback(async () => {
@@ -530,7 +539,7 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
 
         // 商品保存
         if (validProductsForSave.length > 0) {
-          await fetch(`/api/newsletter/${id}`, {
+          const productsRes = await fetch(`/api/newsletter/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -540,6 +549,10 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
               })),
             }),
           })
+          if (!productsRes.ok) {
+            const err = await productsRes.json().catch(() => null)
+            throw new Error(err?.error || '商品情報の保存に失敗しました')
+          }
         }
       }
 
@@ -584,7 +597,7 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
       }
 
       // フォーム値とdraft_dataをDBに更新
-      await fetch(`/api/newsletter/${id}`, {
+      const updateRes = await fetch(`/api/newsletter/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -594,7 +607,14 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
           feature_description: featureDescription || null,
         }),
       })
-      await saveDraft(id, proposal, answers)
+      if (!updateRes.ok) {
+        const err = await updateRes.json().catch(() => null)
+        throw new Error(err?.error || 'メルマガ情報の保存に失敗しました（ヘッダー画像URL等の入力内容を確認してください）')
+      }
+      const draftSaved = await saveDraft(id, proposal, answers)
+      if (!draftSaved) {
+        throw new Error('下書きの保存に失敗しました')
+      }
 
       // 商品保存（おすすめ + ランキング/紹介を結合して保存）
       const validSubProducts = subSectionProducts.filter(p => p.product_url)
@@ -613,13 +633,17 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
         })),
       ]
       if (allProductsToSave.length > 0) {
-        await fetch(`/api/newsletter/${id}`, {
+        const productsRes = await fetch(`/api/newsletter/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             products: allProductsToSave,
           }),
         })
+        if (!productsRes.ok) {
+          const err = await productsRes.json().catch(() => null)
+          throw new Error(err?.error || '商品情報の保存に失敗しました')
+        }
       }
 
       // HTML生成
