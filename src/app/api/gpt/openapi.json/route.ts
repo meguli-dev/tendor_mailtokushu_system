@@ -87,6 +87,7 @@ const spec = {
     },
   },
   components: {
+    schemas: {},
     securitySchemes: {
       bearerAuth: { type: 'http', scheme: 'bearer' },
     },
