@@ -47,7 +47,7 @@ const handler = createMcpHandler(
 
     server.tool(
       'youkinavi_freight',
-      'メーカーの直送運賃・元払い条件、地域特殊運賃、都道府県別の自社配送タリフを検索する。引数なしで全メーカー一覧。',
+      'メーカーの直送運賃・元払い条件、地域特殊運賃、都道府県別の自社配送タリフ（社内参考データ）を検索する。引数なしで全メーカー一覧。【注意】提示価格の送料はyoukinavi_quoteが全国一律800円ベースで自動計算済みなので、このツールの結果を提示単価に上乗せしてはならない。用途は元払い条件の確認と社内での実費把握のみ。',
       {
         p_maker: z.string().optional().describe('メーカー名（部分一致）'),
         p_pref: z.string().optional().describe('都道府県名'),

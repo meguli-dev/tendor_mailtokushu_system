@@ -67,7 +67,8 @@ const spec = {
     '/api/gpt/freight': {
       post: {
         operationId: 'searchFreight',
-        summary: 'メーカー運賃・元払い条件・都道府県タリフを検索',
+        summary: 'メーカー運賃・元払い条件の参考情報を検索（見積もり計算には使わない）',
+        description: '【注意】お客様への提示価格の送料はcalcQuoteが全国一律800円ベースで自動計算済み。このツールの結果（都道府県タリフ等は社内参考データ）を提示価格に上乗せ・加算してはいけない。用途は元払い条件（◯ケース以上）の確認や社内での実費把握のみ。',
         requestBody: {
           required: true,
           content: {
