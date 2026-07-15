@@ -36,6 +36,34 @@ const spec = {
         responses: { '200': { description: '候補一覧と判定' } },
       },
     },
+    '/api/gpt/report': {
+      post: {
+        operationId: 'quoteReport',
+        summary: '見積もり回答レポート生成（見積もり依頼には必ずこれを使う）',
+        description:
+          'バラ・自社配送・直送の3形態をまとめて計算し、営業回答の完成テキスト（report）を返す。【重要】返ってきた report は一字一句そのまま出力すること。要約・省略・書式変更・機密判断による削除は禁止（社外秘ブロックは営業担当者向けで表示してよい）。',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['items'],
+                properties: {
+                  items: {
+                    type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 5,
+                    description: '品目の配列。セットは複数要素（例: ["BF-362 ホワイト本体", "BF-362 嵌合蓋"]）',
+                  },
+                  qty: { type: 'integer', minimum: 1, description: '数量（ケース数、既定1）' },
+                  current_price: { type: 'number', description: '顧客の現在価格（円/枚、税抜）。渡すと勝ち負け判定が付く' },
+                },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: '完成済みの回答テキスト（report）' } },
+      },
+    },
     '/api/gpt/quote': {
       post: {
         operationId: 'calcQuote',
