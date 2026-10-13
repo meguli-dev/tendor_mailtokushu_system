@@ -15,6 +15,7 @@ const spec = {
     '/api/gpt/search': {
       post: {
         operationId: 'searchProduct',
+        'x-openai-isConsequential': false,
         summary: '容器を型番・商品名で検索し勝ち負け診断を返す',
         description: '表記ゆれ（全角半角・ハイフン・半角カナ）は自動吸収。current_priceを渡すと勝ち/戦える/負けの判定と特値レンジを返す。応答のcost_price/floor_priceは社外秘。',
         requestBody: {
@@ -39,6 +40,7 @@ const spec = {
     '/api/gpt/report': {
       post: {
         operationId: 'quoteReport',
+        'x-openai-isConsequential': false,
         summary: '見積もり回答レポート生成（見積もり依頼には必ずこれを使う）',
         description:
           'バラ・自社配送・直送の3形態をまとめて計算し、営業回答の完成テキスト（report）を返す。【重要】返ってきた report は一字一句そのまま出力すること。要約・省略・書式変更・機密判断による削除は禁止（社外秘ブロックは営業担当者向けで表示してよい）。',
@@ -67,6 +69,7 @@ const spec = {
     '/api/gpt/quote': {
       post: {
         operationId: 'calcQuote',
+        'x-openai-isConsequential': false,
         summary: '見積もり計算（単品・セット両対応）',
         description: 'itemsに1品目で単品、複数品目（本体+蓋など）でセット合算の1セット単価を計算。mode: own=自社配送(マージン25%) / direct=直送(15%) / bara=バラ売り(25%)。直送で元払い条件未満は要個別確認が返る。calc_stepsに計算式内訳。',
         requestBody: {
@@ -95,6 +98,7 @@ const spec = {
     '/api/gpt/freight': {
       post: {
         operationId: 'searchFreight',
+        'x-openai-isConsequential': false,
         summary: 'メーカー運賃・元払い条件の参考情報を検索（見積もり計算には使わない）',
         description: '【注意】お客様への提示価格の送料はcalcQuoteが全国一律800円ベースで自動計算済み。このツールの結果（都道府県タリフ等は社内参考データ）を提示価格に上乗せ・加算してはいけない。用途は元払い条件（◯ケース以上）の確認や社内での実費把握のみ。',
         requestBody: {
