@@ -3,17 +3,19 @@
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { LogOut, Image, LayoutTemplate, Settings, Mail, Newspaper, Calculator, Database } from 'lucide-react'
+import { LogOut, Image, LayoutTemplate, Settings, Mail, Newspaper, Calculator, Database, PhoneCall } from 'lucide-react'
 
 const MODULES = [
   { href: '/', label: 'メルマガビルダー', icon: Mail, match: (p: string) => p === '/' || p.startsWith('/newsletter') || p.startsWith('/banner') },
   { href: '/feature', label: '特集ページ', icon: Newspaper, match: (p: string) => p.startsWith('/feature') },
   { href: '/quote', label: '見積りAI', icon: Calculator, match: (p: string) => p.startsWith('/quote') },
+  { href: '/sfa', label: 'SFA', icon: PhoneCall, match: (p: string) => p.startsWith('/sfa'), sfa: true },
 ]
 
-export function Header() {
+export function Header({ salesOnly = false }: { salesOnly?: boolean }) {
   const router = useRouter()
   const pathname = usePathname()
+  const modules = salesOnly ? MODULES.filter((m) => m.sfa) : MODULES
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' })
@@ -27,11 +29,11 @@ export function Header() {
     <header className="border-b bg-background">
       <div className="container mx-auto flex h-14 items-center justify-between px-4">
         <div className="flex items-center gap-6">
-          <Link href="/" className="font-bold text-lg">
+          <Link href={salesOnly ? '/sfa' : '/'} className="font-bold text-lg">
             容器なび 業務ポータル
           </Link>
           <nav className="flex items-center gap-1">
-            {MODULES.map((m) => {
+            {modules.map((m) => {
               const active = m.match(pathname)
               return (
                 <Button key={m.href} variant={active ? 'secondary' : 'ghost'} size="sm" asChild>

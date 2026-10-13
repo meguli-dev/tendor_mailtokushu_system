@@ -2,8 +2,10 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  // MCP / GPTs エンドポイントはSupabase Authではなく専用Bearerキーで認証する（route側で検証）
-  if (request.nextUrl.pathname.startsWith('/api/mcp') || request.nextUrl.pathname.startsWith('/api/gpt')) {
+  // MCP / GPTs / Chatwork Webhook / Cron はSupabase Authではなく各routeで検証する（Bearerキー・署名・CRON_SECRET）
+  const p = request.nextUrl.pathname
+  if (p.startsWith('/api/mcp') || p.startsWith('/api/gpt') || p.startsWith('/api/sfa/mcp') ||
+      p.startsWith('/api/chatwork/webhook') || p.startsWith('/api/cron/')) {
     return NextResponse.next({ request })
   }
 
@@ -60,9 +62,19 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  const salesOnly = user?.app_metadata?.portal_role === 'sales'
+
   if (user && request.nextUrl.pathname.startsWith('/login')) {
     const url = request.nextUrl.clone()
-    url.pathname = '/'
+    url.pathname = salesOnly ? '/sfa' : '/'
+    return NextResponse.redirect(url)
+  }
+
+  // 外部営業（portal_role=sales）はSFAのみ。メルマガ・特集・見積りAI（原価）には入れない
+  if (salesOnly && !(p === '/sfa' || p.startsWith('/sfa/') || p.startsWith('/api/sfa/') || p.startsWith('/api/auth'))) {
+    if (p.startsWith('/api/')) return NextResponse.json({ error: 'この機能を使う権限がありません' }, { status: 403 })
+    const url = request.nextUrl.clone()
+    url.pathname = '/sfa'
     return NextResponse.redirect(url)
   }
 
