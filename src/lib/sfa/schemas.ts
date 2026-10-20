@@ -56,6 +56,20 @@ export const logContactSchema = z.object({
   lost_reason: optText,
 })
 
+const optNum = z.number().finite().nullish()
+export const quoteContentSchema = z.object({
+  total_amount: optNum,
+  valid_note: optText,
+  remarks: optText,
+  lines: z.array(z.object({
+    code: optText,
+    product: z.string().trim().min(1).max(300),
+    qty: optNum,
+    unit_price: optNum,
+    amount: optNum,
+  })).max(100),
+})
+
 export const dealPatchSchema = z.object({
   stage: z.enum(STAGES).optional(),
   temperature: z.enum(TEMPERATURES).nullish(),
@@ -68,6 +82,7 @@ export const dealPatchSchema = z.object({
   answer_due: date.nullish(),
   lost_reason: optText,
   appointment_note: optText,
+  handover_note: optText.describe('対応担当を変えるときの引き継ぎメモ（履歴に「対応担当 A → B」と一緒に残る）'),
   company: z.object({
     name: z.string().trim().min(1).max(200).optional(),
     phone: optText, address: optText, industry: optText, website: optText, bcart_customer_id: optText, memo: optText,

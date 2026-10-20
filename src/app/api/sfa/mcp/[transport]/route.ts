@@ -11,12 +11,12 @@ import { z } from 'zod'
 import { memberFromBearer, type SfaMember } from '@/lib/sfa/member'
 import { listInbox } from '@/lib/sfa/quote-ingest'
 import {
-  appointmentSchema, containerSchema, dealPatchSchema, logContactSchema, nextActionSchema,
+  appointmentSchema, containerSchema, dealPatchSchema, logContactSchema, nextActionSchema, quoteContentSchema,
 } from '@/lib/sfa/schemas'
 import {
-  addContainer, addQuoteFile, assertCanUploadQuote, createAppointment, createTask, ensureQuoteRequest, getDeal, getTodayBoard,
-  listDeals, listMembers, listQuoteQueue, logContact, pipelineSummary, quoteFileUrl, requestQuote,
-  requestRevision, rescheduleTask, SfaError, updateCompany, updateDeal, upsertContact,
+  addContainer, addQuoteFile, assertCanUploadQuote, confirmQuoteContent, createAppointment, createTask, ensureQuoteRequest, getDeal, getTodayBoard,
+  listDeals, listMembers, listQuoteQueue, logContact, pipelineSummary, quoteFileUrl, reparseQuoteFile, requestQuote,
+  requestRevision, rescheduleTask, searchQuoteLines, SfaError, updateCompany, updateDeal, upsertContact,
 } from '@/lib/sfa/service'
 import { STAGES } from '@/lib/sfa/constants'
 
@@ -109,7 +109,7 @@ const handler = createMcpHandler(
 
     server.tool(
       'sfa_update_deal',
-      '案件の更新（段階・温度感・対応担当・検討内容・回答予定日・使用中容器の原文・失注理由など）。company / contact で店舗・先方担当者の情報も更新できる。段階変更は履歴に自動記録される。',
+      '案件の更新（段階・温度感・対応担当・検討内容・回答予定日・使用中容器の原文・失注理由など）。company / contact で店舗・先方担当者の情報も更新できる。段階変更は履歴に自動記録される。対応担当を変えると「対応担当 A → B」（handover_note があれば引き継ぎメモも）が履歴に残り、未完了の予定は新しい担当に移る。',
       { deal_id: z.number().int(), owner_name: z.string().optional().describe('対応担当を名前で指定'), ...dealPatchSchema.shape },
       async ({ deal_id, owner_name, company, contact, ...patch }) => run(async () => {
         const deal = await getDeal(deal_id) as unknown as { company_id: number }
@@ -155,7 +155,7 @@ const handler = createMcpHandler(
 
     server.tool(
       'sfa_upload_quote',
-      '見積書ファイルを案件に登録する（版は自動採番）。content_base64（ファイル本体）か url（https。Google Driveの共有リンク可）のどちらかを渡す。quote_request_id が無ければ deal_id の未完了の見積依頼に紐付ける（無ければ自動作成）。',
+      '見積書ファイルを案件に登録する（版は自動採番。PDFなら明細を自動で読み取り、結果を content に返す）。content_base64（ファイル本体）か url（https。Google Driveの共有リンク可）のどちらかを渡す。quote_request_id が無ければ deal_id の未完了の見積依頼に紐付ける（無ければ自動作成）。',
       {
         quote_request_id: z.number().int().optional(),
         deal_id: z.number().int().optional(),
@@ -188,6 +188,27 @@ const handler = createMcpHandler(
       '見積書ファイルのダウンロードURL（10分有効）。',
       { file_id: z.number().int() },
       async ({ file_id }) => run(() => quoteFileUrl(file_id)),
+    )
+
+    server.tool(
+      'sfa_search_quote_lines',
+      '過去に提示した見積の明細を品名・型番で検索する（どの店に・いつ・いくらで出したか）。単価・金額は税抜。案件ごとの明細は sfa_get_deal の quote_requests[].files[].lines にもある。',
+      { q: z.string().min(1).describe('品名・型番の一部（例: KMスクエア 228、VK-62）'), limit: z.number().int().min(1).max(200).optional() },
+      async ({ q, limit }) => run(() => searchQuoteLines(q, limit)),
+    )
+
+    server.tool(
+      'sfa_confirm_quote_content',
+      '見積書（版）の明細を直して確定する。lines を丸ごと置き換える。金額を省略すると 入数×単価 で計算、合計を省略すると明細の合計。テンドールまたは管理者のみ。',
+      { quote_file_id: z.number().int(), ...quoteContentSchema.shape },
+      async ({ quote_file_id, ...input }) => run(() => confirmQuoteContent(me(), quote_file_id, input)),
+    )
+
+    server.tool(
+      'sfa_reparse_quote',
+      '保存済みの見積書PDFを読み取り直して明細を作り直す（確定済みの修正は消える）。テンドールまたは管理者のみ。',
+      { quote_file_id: z.number().int() },
+      async ({ quote_file_id }) => run(() => reparseQuoteFile(me(), quote_file_id)),
     )
 
     server.tool(

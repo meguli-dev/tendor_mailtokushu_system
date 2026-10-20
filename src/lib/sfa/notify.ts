@@ -1,17 +1,25 @@
 /**
  * SFAのChatwork通知
  *   見積作成依頼・修正依頼 → 見積書専用ルーム（テンドールのメンバーにTo）
- *   見積書受領            → 対応担当の個別ルーム（未設定なら CHATWORK_NOTIFY_ROOM_ID）
- *   毎朝のまとめ          → 各メンバーの個別ルーム
+ *   見積書受領            → 対応担当の個別ルーム（未設定なら所属側の通知ルーム）
+ *   毎朝のまとめ          → digest.ts（所属ごとに1通）
+ * 通知ルームは所属で分ける:
+ *   CHATWORK_TENDOR_ROOM_ID : テンドール物流のメンバー宛て
+ *   CHATWORK_SALES_ROOM_ID  : それ以外（テレアポ事業者・meguli）宛て
  * トークン未設定時は何もしない（null を返す）。通知の失敗で業務処理を止めない。
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import { chatworkConfigured, postMessage, quoteRoomId, to, uploadFile } from './chatwork'
 import { SFA_OWNER_TENANT_NAME } from './constants'
 import type { SfaMember } from './member'
+import type { ParsedQuote } from './quote-parse'
 
 const appUrl = () => (process.env.NEXT_PUBLIC_APP_URL || 'https://tendor-mailtokushu-system.vercel.app').replace(/\/$/, '')
 export const dealUrl = (dealId: number) => `${appUrl()}/sfa/deals/${dealId}`
+
+/** 通知ルーム（所属側）。テンドールとテレアポ事業者で別ルーム */
+const sideRoom = (tenantName: string | null | undefined) =>
+  (tenantName === SFA_OWNER_TENANT_NAME ? process.env.CHATWORK_TENDOR_ROOM_ID : process.env.CHATWORK_SALES_ROOM_ID) || null
 
 interface QuoteCtx {
   id: number
@@ -21,7 +29,7 @@ interface QuoteCtx {
   deal: {
     current_containers_text: string | null
     company: { name: string } | null
-    owner: { id: number; name: string; chatwork_account_id: string | null; chatwork_room_id: string | null } | null
+    owner: { id: number; name: string; chatwork_account_id: string | null; chatwork_room_id: string | null; tenant: { name: string } | null } | null
   }
 }
 
@@ -67,23 +75,19 @@ export async function notifyRevisionRequest(
   return postMessage(quoteRoomId(), body)
 }
 
-export async function notifyQuoteReady(ctx: QuoteCtx, version: number): Promise<string | null> {
+export async function notifyQuoteReady(ctx: QuoteCtx, version: number, parsed?: ParsedQuote | null): Promise<string | null> {
   if (!chatworkConfigured()) return null
   const owner = ctx.deal.owner
-  const room = owner?.chatwork_room_id || process.env.CHATWORK_NOTIFY_ROOM_ID
+  const room = owner?.chatwork_room_id || sideRoom(owner?.tenant?.name)
   if (!room) return null
   const body = [
     to(owner?.chatwork_account_id, owner?.name),
     `[info][title]見積書が届きました：${ctx.deal.company?.name ?? ''} 様（第${version}版・#Q-${ctx.id}）[/title]`,
+    parsed?.lines.length
+      ? `${parsed.lines.map((l) => `・${l.product}　${l.qty ?? ''}　@${l.unit_price ?? '-'}円　${l.amount?.toLocaleString() ?? '-'}円`).join('\n')}\n合計 ${parsed.total_amount?.toLocaleString() ?? '-'}円（税抜）${parsed.status === 'needs_review' ? `\n※読み取り要確認：${parsed.note}` : ''}\n`
+      : '',
     'お客様に提示したら、SFAで「見積提示」を記録し、回答予定日を登録してください。',
     `案件：${dealUrl(ctx.deal_id)}[/info]`,
   ].join('\n')
   return postMessage(room, body)
-}
-
-export async function sendToMember(member: Pick<SfaMember, 'name' | 'chatwork_account_id' | 'chatwork_room_id'>, body: string): Promise<string | null> {
-  if (!chatworkConfigured()) return null
-  const room = member.chatwork_room_id || process.env.CHATWORK_NOTIFY_ROOM_ID
-  if (!room) return null
-  return postMessage(room, `${to(member.chatwork_account_id, member.name)}${body}`)
 }
