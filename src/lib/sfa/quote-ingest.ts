@@ -12,6 +12,7 @@ import { downloadFile, fileIdsInBody, getFile, getMessage, listFiles, me, postMe
 import { QUOTE_WAITING_STATUSES, type QuoteStatus } from './constants'
 import type { SfaMember } from './member'
 import { decide, type Candidate } from './quote-match'
+import { parseQuotePdf } from './quote-parse'
 import { addQuoteFile, ensureQuoteRequest, isQuoteMaker, ownerTenantId, SfaError } from './service'
 
 export { decide, normalize, type Candidate, type Decision } from './quote-match'
@@ -43,6 +44,15 @@ async function getSystemAccountId() {
   return systemAccountId
 }
 
+/**
+ * テンドール以外でも見積書として取り込む投稿者（ChatworkアカウントID、カンマ区切り）
+ *   テスト運用で平岡（=システムアカウント）が投稿したPDFを取り込むため
+ */
+const extraUploaders = () => (process.env.CHATWORK_EXTRA_UPLOADER_IDS || '').split(',').map((s) => s.trim()).filter(Boolean)
+
+/** システムが投稿した依頼メッセージ（修正依頼の参考添付を見積書として取り込まない） */
+const SYSTEM_POST = /【(見積作成依頼|修正依頼) #Q-\d+】/
+
 async function memberByChatwork(accountId: string): Promise<SfaMember | null> {
   const { data } = await db().from('sfa_members')
     .select('id, name, tenant_id, role, email, auth_user_id, chatwork_account_id, chatwork_room_id, active')
@@ -67,7 +77,7 @@ export interface IngestResult { file_id: string; decision: string; reason: strin
 /** 見積書ルームの1メッセージを処理する（Webhook・同期の共通入口） */
 export async function ingestMessage(msg: { room_id: string; message_id: string; account_id: string; account_name?: string; body: string }): Promise<IngestResult[]> {
   if (!quoteRoomId() || msg.room_id !== quoteRoomId()) return []
-  if (msg.account_id === (await getSystemAccountId())) return []
+  if (msg.account_id === (await getSystemAccountId()) && (SYSTEM_POST.test(msg.body) || !extraUploaders().includes(msg.account_id))) return []
   const fileIds = fileIdsInBody(msg.body)
   if (!fileIds.length) return []
 
@@ -80,7 +90,7 @@ export async function ingestMessage(msg: { room_id: string; message_id: string; 
       room_id: msg.room_id, message_id: msg.message_id, file_id: fileId, account_id: msg.account_id,
       account_name: msg.account_name ?? meta.account.name, file_name: meta.filename, body: msg.body.slice(0, 4000),
     }
-    if (!poster || !(await isQuoteMaker(poster))) {
+    if (!poster || !((await isQuoteMaker(poster)) || extraUploaders().includes(msg.account_id))) {
       const reason = poster ? `投稿者（${poster.name}）が見積作成側ではない（修正依頼の参考添付など）` : '投稿者がSFAメンバーに未登録'
       await log({ ...base, decision: 'ignored', reason })
       results.push({ file_id: fileId, decision: 'ignored', reason })
@@ -92,11 +102,13 @@ export async function ingestMessage(msg: { room_id: string; message_id: string; 
       continue
     }
 
-    const d = decide({ fileName: meta.filename, body: msg.body }, await loadCandidates())
+    // PDFは先に中身を読み、宛名（○○ 御中）も照合に使う
+    const { buffer } = await downloadFile(msg.room_id, fileId)
+    const parsed = /\.pdf$/i.test(meta.filename) ? await parseQuotePdf(buffer).catch(() => null) : null
+    const d = decide({ fileName: meta.filename, body: msg.body, addressee: parsed?.addressee }, await loadCandidates())
     if (d.decision === 'auto' && d.best) {
-      const { buffer } = await downloadFile(msg.room_id, fileId)
       const saved = await addQuoteFile(poster, {
-        quote_request_id: d.best.quote_request_id, buffer, file_name: meta.filename, source: 'chatwork', chatwork_file_id: fileId,
+        quote_request_id: d.best.quote_request_id, buffer, file_name: meta.filename, source: 'chatwork', chatwork_file_id: fileId, parsed,
       })
       await log({ ...base, decision: 'auto', reason: d.reason, confidence: d.confidence, candidates: d.candidates, quote_request_id: d.best.quote_request_id, quote_file_id: saved.quote_file_id })
       await postMessage(msg.room_id, `${reply(msg.account_id, msg.room_id, msg.message_id)}\n✅ ${d.best.company_name} 様の案件に登録しました（第${saved.version}版・#Q-${d.best.quote_request_id}）`).catch(() => null)

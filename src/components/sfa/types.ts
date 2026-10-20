@@ -119,6 +119,19 @@ export interface Container {
   memo: string | null
 }
 
+export interface QuoteLine {
+  id: number
+  line_no: number
+  code: string | null
+  product: string
+  qty: number | null
+  unit_price: number | null
+  amount: number | null
+  check_ok: boolean | null
+}
+
+export type QuoteParseStatus = 'none' | 'parsed' | 'needs_review' | 'failed' | 'confirmed'
+
 export interface QuoteFile {
   id: number
   version: number
@@ -127,6 +140,16 @@ export interface QuoteFile {
   source: string
   uploaded_at: string
   size_bytes: number | null
+  parse_status: QuoteParseStatus
+  parse_note: string | null
+  quote_no: string | null
+  issued_on: string | null
+  addressee: string | null
+  issuer_person: string | null
+  total_amount: number | null
+  valid_note: string | null
+  remarks: string | null
+  lines: QuoteLine[]
 }
 
 export interface QuoteRequest {

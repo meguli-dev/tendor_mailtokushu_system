@@ -3,6 +3,7 @@
  *   CHATWORK_API_TOKEN       : システムアカウントのAPIトークン
  *   CHATWORK_QUOTE_ROOM_ID   : 見積書専用ルーム
  *   CHATWORK_WEBHOOK_TOKEN   : Webhook設定画面のトークン（署名検証用）
+ *   SFA_NOTIFY_TEST_MODE=1   : テスト運用中。テンドール・外部営業向けの通知もすべて見積書ルームに送る
  */
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
@@ -13,6 +14,9 @@ export function chatworkConfigured(): boolean {
 }
 
 export const quoteRoomId = () => process.env.CHATWORK_QUOTE_ROOM_ID || ''
+
+/** テスト運用中は所属・個別の通知ルームを使わず、見積書ルームに集約する */
+export const notifyTestMode = () => process.env.SFA_NOTIFY_TEST_MODE === '1'
 
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = process.env.CHATWORK_API_TOKEN
