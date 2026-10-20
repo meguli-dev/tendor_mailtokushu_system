@@ -3,9 +3,10 @@
  *   所属ごとに1通にまとめて、それぞれの通知ルームに送る
  *     テンドール（CHATWORK_TENDOR_ROOM_ID）: テンドールのメンバーが対応担当の案件
  *     外部営業  （CHATWORK_SALES_ROOM_ID） : 外部営業が対応担当・トスアップした案件
+ *   テスト運用中（SFA_NOTIFY_TEST_MODE=1）は2通とも見積書ルームに送る
  *   中身: 件数サマリ / 今日架電 / 2日以上放置 / 追客推奨（いずれも対応担当ごと）
  */
-import { postMessage } from './chatwork'
+import { notifyTestMode, postMessage, quoteRoomId } from './chatwork'
 import { SFA_OWNER_TENANT_NAME, todayJst } from './constants'
 import { dealUrl } from './notify'
 import { listInbox } from './quote-ingest'
@@ -89,9 +90,10 @@ export async function buildDigest(side: 'tendor' | 'sales'): Promise<string> {
 
 export async function sendDailyDigests() {
   const sent: string[] = []
+  const test = notifyTestMode()
   const targets = [
-    ['tendor', process.env.CHATWORK_TENDOR_ROOM_ID],
-    ['sales', process.env.CHATWORK_SALES_ROOM_ID],
+    ['tendor', test ? quoteRoomId() : process.env.CHATWORK_TENDOR_ROOM_ID],
+    ['sales', test ? quoteRoomId() : process.env.CHATWORK_SALES_ROOM_ID],
   ] as const
   for (const [side, room] of targets) {
     if (!room) continue

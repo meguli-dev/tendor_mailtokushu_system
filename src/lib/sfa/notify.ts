@@ -6,10 +6,11 @@
  * 通知ルームは所属で分ける:
  *   CHATWORK_TENDOR_ROOM_ID : テンドール物流のメンバー宛て
  *   CHATWORK_SALES_ROOM_ID  : それ以外（テレアポ事業者・meguli）宛て
+ *   テスト運用中（SFA_NOTIFY_TEST_MODE=1）は個別・所属ルームを使わず、すべて見積書ルームに送る
  * トークン未設定時は何もしない（null を返す）。通知の失敗で業務処理を止めない。
  */
 import { createAdminClient } from '@/lib/supabase/admin'
-import { chatworkConfigured, postMessage, quoteRoomId, to, uploadFile } from './chatwork'
+import { chatworkConfigured, notifyTestMode, postMessage, quoteRoomId, to, uploadFile } from './chatwork'
 import { SFA_OWNER_TENANT_NAME } from './constants'
 import type { SfaMember } from './member'
 import type { ParsedQuote } from './quote-parse'
@@ -78,7 +79,7 @@ export async function notifyRevisionRequest(
 export async function notifyQuoteReady(ctx: QuoteCtx, version: number, parsed?: ParsedQuote | null): Promise<string | null> {
   if (!chatworkConfigured()) return null
   const owner = ctx.deal.owner
-  const room = owner?.chatwork_room_id || sideRoom(owner?.tenant?.name)
+  const room = notifyTestMode() ? quoteRoomId() || null : owner?.chatwork_room_id || sideRoom(owner?.tenant?.name)
   if (!room) return null
   const body = [
     to(owner?.chatwork_account_id, owner?.name),
