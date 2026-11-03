@@ -210,7 +210,7 @@ async function getDealRow(id: number) {
   }
 }
 
-async function addActivity(dealId: number, member: SfaMember | null, kind: ActivityKind, body: string,
+export async function addActivity(dealId: number, member: SfaMember | null, kind: ActivityKind, body: string,
   opts: { occurred_on?: string | null; source?: 'ui' | 'mcp' | 'import' | 'system' } = {}) {
   must(await db().from('sfa_activities').insert({
     deal_id: dealId, kind, body,

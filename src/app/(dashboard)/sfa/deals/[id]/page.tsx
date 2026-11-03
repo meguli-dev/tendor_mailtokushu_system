@@ -15,7 +15,8 @@ import { STAGES, TASK_KINDS, TEMPERATURES, type Stage, type TaskKind, type Tempe
 import { LogContactDialog } from '@/components/sfa/log-contact-dialog'
 import { QuoteRequestDialog, QuoteUploadDialog, RevisionDialog } from '@/components/sfa/quote-dialogs'
 import { QuoteStatusBadge, StageBadge } from '@/components/sfa/stage-badge'
-import type { Container, DealDetail, Task } from '@/components/sfa/types'
+import type { Container, DealDetail, DealLine, Task } from '@/components/sfa/types'
+import { DealLineCard } from '@/components/sfa/line-parts'
 import { QuoteContent } from '@/components/sfa/quote-content'
 import { useMe, useMembers } from '@/components/sfa/use-members'
 import { addDays, api, DATE_PRESETS, fmtDate, fmtDateTime, selectClass, telHref, todayJst } from '@/components/sfa/utils'
@@ -112,6 +113,11 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
       }), [dealId])
 
   useEffect(() => { load() }, [load])
+
+  const [line, setLine] = useState<DealLine | null>(null)
+  const loadLine = useCallback(() =>
+    api<DealLine>(`/api/sfa/deals/${dealId}/line`, { silent: true }).then(setLine).catch(() => setLine({ users: [], invites: [], friend_url: '' })), [dealId])
+  useEffect(() => { loadLine() }, [loadLine])
 
   async function patch(body: Record<string, unknown>, msg = '保存しました') {
     try {
@@ -348,6 +354,8 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
               ))}
             </CardContent>
           </Card>
+
+          <DealLineCard dealId={dealId} line={line} phone={contact?.mobile ?? null} onChange={() => { loadLine(); load() }} />
 
           <Card>
             <CardHeader><CardTitle className="text-base">検討状況</CardTitle></CardHeader>

@@ -9,6 +9,7 @@
 import { notifyTestMode, postMessage, quoteRoomId } from './chatwork'
 import { SFA_OWNER_TENANT_NAME, todayJst } from './constants'
 import { dealUrl } from './notify'
+import { listPendingLineUsers } from './line'
 import { listInbox } from './quote-ingest'
 import { getTodayBoard, latestQuoteSummaries, listDeals, listMembers, type DealOverview } from './service'
 
@@ -74,9 +75,15 @@ export async function buildDigest(side: 'tendor' | 'sales'): Promise<string> {
   const queue = all.quote_queue.filter((q) => ids.has(q.deal_id))
   const inbox = side === 'tendor' ? ((await listInbox())?.length ?? 0) : 0
   const quotes = await latestQuoteSummaries([...dueToday, ...chase].map((d) => d.id))
+  // LINE未対応（未紐付け・担当未割当はテンドール側に出す。受注済の顧客からの連絡も対象）。朝まとめの先頭に置く
+  const linePending = (await listPendingLineUsers()).filter((u) =>
+    side === 'tendor' ? !u.owner_name || isTendor(u.owner_name) : !!u.owner_name && !isTendor(u.owner_name))
+  const lineRow = (u: (typeof linePending)[number]) =>
+    `・${u.company_name ? `${u.company_name} 様` : '（未紐付け）'} LINE：${u.display_name ?? '名前不明'}${u.owner_name ? `（${u.owner_name}）` : ''}\n　「${cut(u.last_message_text, 50)}」`
 
   const parts = [
     `[info][title]${md(today)} SFA全体（${side === 'tendor' ? 'テンドール' : '外部営業'}）[/title]`,
+    linePending.length ? `■LINE未対応（${linePending.length}件）※最優先で返信してください\n${linePending.slice(0, 20).map(lineRow).join('\n')}${linePending.length > 20 ? `\n…ほか${linePending.length - 20}件` : ''}\n` : '',
     `進行中 ${scoped.length}件 ／ 期限切れ ${overdue.length}件 ／ 今日架電 ${dueToday.length}件 ／ 次回未設定 ${noNext.length}件`,
     `見積作成待ち ${queue.filter((q) => q.status !== '作成中').length}件 ／ 見積作成中 ${queue.filter((q) => q.status === '作成中').length}件 ／ 見積提示待ち ${scoped.filter((d) => d.stage === '見積作成済').length}件${inbox ? ` ／ 仕分け待ち ${inbox}件` : ''}`,
     `検討中 ${scoped.filter((d) => d.stage === '検討中').length}件`,

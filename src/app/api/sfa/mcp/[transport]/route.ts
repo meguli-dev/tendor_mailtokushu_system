@@ -9,9 +9,13 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { createMcpHandler } from 'mcp-handler'
 import { z } from 'zod'
 import { memberFromBearer, type SfaMember } from '@/lib/sfa/member'
+import {
+  createLineInvite, getDealLine, linkLineUser, listPendingLineUsers, listUnlinkedLineUsers, markLineHandled, unlinkLineUser,
+} from '@/lib/sfa/line'
 import { listInbox } from '@/lib/sfa/quote-ingest'
 import {
-  appointmentSchema, containerSchema, dealPatchSchema, logContactSchema, nextActionSchema, quoteContentSchema,
+  appointmentSchema, containerSchema, dealPatchSchema, lineHandledSchema, lineInviteSchema, lineLinkSchema, logContactSchema,
+  nextActionSchema, quoteContentSchema,
 } from '@/lib/sfa/schemas'
 import {
   addContainer, addQuoteFile, assertCanUploadQuote, confirmQuoteContent, createAppointment, createTask, ensureQuoteRequest, getDeal, getTodayBoard,
@@ -216,6 +220,53 @@ const handler = createMcpHandler(
       'テンドールの見積作成待ち（依頼中・作成中・修正依頼）と、Chatworkから届いたが紐付けできていない見積書（仕分け待ち）。',
       {},
       async () => run(async () => ({ queue: await listQuoteQueue(), inbox: await listInbox() })),
+    )
+
+    server.tool(
+      'sfa_line_unlinked',
+      '案件に紐付いていないLINE友だちの一覧。表示名・アイコン・友だち追加日時・直近メッセージと、案件の候補（SMS招待の時刻・表示名やメッセージ内の店舗名から推定、score 0〜1）を返す。終業時に候補を確認して sfa_line_link で紐付ける。候補が無い・確信が持てない場合は sfa_search_deals で探し、それでも分からなければ紐付けずに残す。',
+      { include_blocked: z.boolean().optional().describe('trueでブロック（友だち解除）された人も含める') },
+      async ({ include_blocked }) => run(() => listUnlinkedLineUsers({ includeBlocked: include_blocked })),
+    )
+
+    server.tool(
+      'sfa_line_link',
+      'LINE友だちを案件に紐付ける（deal_id=null で解除）。紐付けると案件の接触履歴に記録され、以後の受信は対応担当に通知される。',
+      { line_user_id: z.number().int().describe('sfa_line_unlinked の id'), ...lineLinkSchema.shape },
+      async ({ line_user_id, deal_id, note }) => run(() =>
+        deal_id ? linkLineUser(me(), line_user_id, deal_id, note, 'mcp') : unlinkLineUser(me(), line_user_id, 'mcp')),
+    )
+
+    server.tool(
+      'sfa_line_pending',
+      'LINEの未対応（顧客からメッセージが届いて、まだ対応済になっていない）一覧。経過時間（pending_minutes）の長い順。店舗名・対応担当・直近メッセージ付き。未紐付けの人も含む（deal_id=null）。',
+      {
+        mine: z.boolean().optional().describe('trueで自分が対応担当の案件のみ'),
+        owner_name: z.string().optional().describe('対応担当の名前で絞る'),
+      },
+      async ({ mine, owner_name }) => run(async () =>
+        listPendingLineUsers({ ownerId: mine ? me().id : await memberIdByName(owner_name) })),
+    )
+
+    server.tool(
+      'sfa_line_mark_handled',
+      'LINEの未対応を「対応済」にする（返信したことの記録。LINEの返信はAPIで取れないため自己申告）。memo を付けると案件の接触履歴に残る。',
+      { line_user_id: z.number().int(), ...lineHandledSchema.shape },
+      async ({ line_user_id, memo }) => run(() => markLineHandled(me(), line_user_id, { memo, source: 'mcp' })),
+    )
+
+    server.tool(
+      'sfa_line_deal',
+      '案件に紐付いているLINE友だちと受信メッセージ、SMS招待の履歴。',
+      { deal_id: z.number().int() },
+      async ({ deal_id }) => run(() => getDealLine(deal_id)),
+    )
+
+    server.tool(
+      'sfa_line_invite',
+      'LINE友だち追加の招待文（SMS用）とURLを作り、招待した記録を残す（友だち追加時に、この案件を紐付け候補として出すため）。SMSは営業担当が自分の携帯から送る。',
+      { deal_id: z.number().int(), ...lineInviteSchema.shape },
+      async ({ deal_id, phone }) => run(() => createLineInvite(me(), deal_id, phone)),
     )
 
     server.tool(

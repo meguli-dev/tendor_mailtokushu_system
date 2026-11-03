@@ -206,3 +206,40 @@ export interface InboxItem {
   candidates: InboxCandidate[] | null
   created_at: string
 }
+
+export interface LineCandidate {
+  deal_id: number
+  company_name: string
+  owner_name: string | null
+  score: number
+  reason: string
+}
+
+export interface LineMessage {
+  type: string
+  text: string | null
+  sent_at: string
+}
+
+export interface LineUser {
+  id: number
+  display_name: string | null
+  picture_url: string | null
+  is_friend: boolean
+  followed_at: string | null
+  last_message_at: string | null
+  last_message_text: string | null
+  pending_since: string | null
+  pending_minutes: number | null
+  deal_id: number | null
+  company_name?: string | null
+  owner_name?: string | null
+  messages?: LineMessage[]
+  candidates?: LineCandidate[]
+}
+
+export interface DealLine {
+  users: LineUser[]
+  invites: Array<{ id: number; created_at: string; phone: string | null; member: { name: string } | null }>
+  friend_url: string
+}

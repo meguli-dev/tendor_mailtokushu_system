@@ -15,11 +15,11 @@ import { SFA_OWNER_TENANT_NAME } from './constants'
 import type { SfaMember } from './member'
 import type { ParsedQuote } from './quote-parse'
 
-const appUrl = () => (process.env.NEXT_PUBLIC_APP_URL || 'https://tendor-mailtokushu-system.vercel.app').replace(/\/$/, '')
+export const appUrl = () => (process.env.NEXT_PUBLIC_APP_URL || 'https://tendor-mailtokushu-system.vercel.app').replace(/\/$/, '')
 export const dealUrl = (dealId: number) => `${appUrl()}/sfa/deals/${dealId}`
 
 /** 通知ルーム（所属側）。テンドールとテレアポ事業者で別ルーム */
-const sideRoom = (tenantName: string | null | undefined) =>
+export const sideRoom = (tenantName: string | null | undefined) =>
   (tenantName === SFA_OWNER_TENANT_NAME ? process.env.CHATWORK_TENDOR_ROOM_ID : process.env.CHATWORK_SALES_ROOM_ID) || null
 
 interface QuoteCtx {

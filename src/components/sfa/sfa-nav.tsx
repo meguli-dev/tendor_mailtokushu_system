@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CalendarCheck, Columns3, List, FileText, Users } from 'lucide-react'
+import { CalendarCheck, Columns3, List, FileText, MessageCircle, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const TABS = [
@@ -10,6 +10,7 @@ const TABS = [
   { href: '/sfa/pipeline', label: 'パイプライン', icon: Columns3, match: (p: string) => p.startsWith('/sfa/pipeline') },
   { href: '/sfa/deals', label: '案件一覧', icon: List, match: (p: string) => p.startsWith('/sfa/deals') },
   { href: '/sfa/quotes', label: '見積', icon: FileText, match: (p: string) => p.startsWith('/sfa/quotes') },
+  { href: '/sfa/line', label: 'LINE', icon: MessageCircle, match: (p: string) => p.startsWith('/sfa/line') },
   { href: '/sfa/members', label: 'メンバー', icon: Users, match: (p: string) => p.startsWith('/sfa/members') },
 ]
 

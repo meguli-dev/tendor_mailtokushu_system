@@ -2,10 +2,10 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  // MCP / GPTs / Chatwork Webhook / Cron はSupabase Authではなく各routeで検証する（Bearerキー・署名・CRON_SECRET）
+  // MCP / GPTs / Chatwork・LINE Webhook / Cron はSupabase Authではなく各routeで検証する（Bearerキー・署名・CRON_SECRET）
   const p = request.nextUrl.pathname
   if (p.startsWith('/api/mcp') || p.startsWith('/api/gpt') || p.startsWith('/api/sfa/mcp') ||
-      p.startsWith('/api/chatwork/webhook') || p.startsWith('/api/cron/')) {
+      p.startsWith('/api/chatwork/webhook') || p.startsWith('/api/line/webhook') || p.startsWith('/api/cron/')) {
     return NextResponse.next({ request })
   }
 

@@ -109,6 +109,19 @@ export const taskSchema = z.object({
   assignee_id: z.number().int().nullish(),
 })
 
+export const lineLinkSchema = z.object({
+  deal_id: z.number().int().nullable().describe('紐付ける案件。null で紐付け解除'),
+  note: optText.describe('紐付けの根拠（「SMS招待の3分後に追加」「表示名が店名」等）'),
+})
+
+export const lineHandledSchema = z.object({
+  memo: optText.describe('返信内容の要約など。案件に紐付いていれば接触履歴に残る'),
+})
+
+export const lineInviteSchema = z.object({
+  phone: optText.describe('送り先の携帯番号（SMSアプリを開くリンクを作る）'),
+})
+
 export const memberSchema = z.object({
   id: z.number().int().optional(),
   name: z.string().trim().min(1).max(50),

@@ -98,14 +98,19 @@ export function fileIdsInBody(body: string): string[] {
   return [...body.matchAll(/\[download:(\d+)\]/g)].map((m) => m[1])
 }
 
-/** Webhookの署名検証: base64(HMAC-SHA256(body, base64decode(token))) */
+/**
+ * Webhookの署名検証: base64(HMAC-SHA256(body, base64decode(token)))
+ *   Webhookごとにトークンが違うため、見積書ルーム用（CHATWORK_WEBHOOK_TOKEN）と
+ *   自分宛てメンション用（CHATWORK_MENTION_WEBHOOK_TOKEN。LINE通知への「済」返信を拾う）のどちらかで通ればよい
+ */
 export function verifyWebhookSignature(rawBody: string, signature: string | null): boolean {
-  const token = process.env.CHATWORK_WEBHOOK_TOKEN
-  if (!token || !signature) return false
-  const expected = createHmac('sha256', Buffer.from(token, 'base64')).update(rawBody).digest('base64')
-  const a = Buffer.from(expected)
+  if (!signature) return false
   const b = Buffer.from(signature)
-  return a.length === b.length && timingSafeEqual(a, b)
+  return [process.env.CHATWORK_WEBHOOK_TOKEN, process.env.CHATWORK_MENTION_WEBHOOK_TOKEN].some((token) => {
+    if (!token) return false
+    const a = Buffer.from(createHmac('sha256', Buffer.from(token, 'base64')).update(rawBody).digest('base64'))
+    return a.length === b.length && timingSafeEqual(a, b)
+  })
 }
 
 /** 宛先・返信タグ */
