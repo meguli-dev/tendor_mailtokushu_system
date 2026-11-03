@@ -486,7 +486,7 @@ export function BannerGenerateDialog({
                 <div className="flex gap-2 flex-wrap">
                   <CopyButton text={generatedUrl} label="URLをコピー" />
                   <Button variant="outline" size="sm" asChild>
-                    <a href={generatedUrl} download="banner.png" target="_blank" rel="noopener noreferrer">
+                    <a href={generatedUrl} download="banner.webp" target="_blank" rel="noopener noreferrer">
                       <Download className="mr-1 h-4 w-4" />
                       ダウンロード
                     </a>
@@ -517,7 +517,7 @@ export function BannerGenerateDialog({
                   <div className="flex gap-2 flex-wrap">
                     <CopyButton text={secondUrl} label="URLをコピー" />
                     <Button variant="outline" size="sm" asChild>
-                      <a href={secondUrl} download="banner-2nd.png" target="_blank" rel="noopener noreferrer">
+                      <a href={secondUrl} download="banner-2nd.webp" target="_blank" rel="noopener noreferrer">
                         <Download className="mr-1 h-4 w-4" />
                         ダウンロード
                       </a>
