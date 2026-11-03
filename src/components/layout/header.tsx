@@ -3,12 +3,13 @@
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { LogOut, Image, LayoutTemplate, Settings, Mail, Newspaper, Calculator, Database, PhoneCall } from 'lucide-react'
+import { LogOut, Image, LayoutTemplate, Settings, Mail, Newspaper, Calculator, Database, PhoneCall, Send } from 'lucide-react'
 
 const MODULES = [
   { href: '/', label: 'メルマガビルダー', icon: Mail, match: (p: string) => p === '/' || p.startsWith('/newsletter') || p.startsWith('/banner') },
   { href: '/feature', label: '特集ページ', icon: Newspaper, match: (p: string) => p.startsWith('/feature') },
   { href: '/quote', label: '見積りAI', icon: Calculator, match: (p: string) => p.startsWith('/quote') },
+  { href: '/mail', label: 'メール配信', icon: Send, match: (p: string) => p.startsWith('/mail') },
   { href: '/sfa', label: 'SFA', icon: PhoneCall, match: (p: string) => p.startsWith('/sfa'), sfa: true },
 ]
 
