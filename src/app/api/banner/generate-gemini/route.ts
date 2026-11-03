@@ -4,6 +4,7 @@ import { generateBannerImageOpenAI, editBannerImageOpenAI } from '@/lib/openai-i
 import { imageModelDef } from '@/lib/image-models'
 import { bannerGenerateSchema } from '@/lib/validators'
 import { uploadToS3 } from '@/lib/s3'
+import { toWebp } from '@/lib/image-format'
 import { NextResponse } from 'next/server'
 
 const MONTHLY_LIMIT = 60
@@ -69,13 +70,12 @@ export async function POST(request: Request) {
       ? await generateBannerImageOpenAI(genParams)
       : await generateBannerImage(genParams)
 
-    // Upload generated image to S3
-    const ext = result.mimeType === 'image/png' ? 'png' : 'jpg'
-    const buffer = Buffer.from(result.imageData, 'base64')
+    // Upload generated image to S3（WebPに変換して容量を抑える）
+    const { buffer, ext, mimeType } = await toWebp(result)
     const { s3Key, s3Url } = await uploadToS3(
       buffer,
       `banner-generated.${ext}`,
-      result.mimeType,
+      mimeType,
       'banner'
     )
 
@@ -118,9 +118,8 @@ export async function POST(request: Request) {
         ? await editBannerImageOpenAI(remakeParams)
         : await editBannerImage(remakeParams)
 
-      const ext2 = result2.mimeType === 'image/png' ? 'png' : 'jpg'
-      const buffer2 = Buffer.from(result2.imageData, 'base64')
-      const up2 = await uploadToS3(buffer2, `banner-generated-2nd.${ext2}`, result2.mimeType, 'banner')
+      const { buffer: buffer2, ext: ext2, mimeType: mimeType2 } = await toWebp(result2)
+      const up2 = await uploadToS3(buffer2, `banner-generated-2nd.${ext2}`, mimeType2, 'banner')
       secondS3Url = up2.s3Url
 
       await supabase.from('images').insert({
@@ -149,7 +148,7 @@ export async function POST(request: Request) {
       s3Url,
       s3Key,
       secondS3Url,
-      mimeType: result.mimeType,
+      mimeType,
       usage: {
         used: newUsed,
         limit: MONTHLY_LIMIT,

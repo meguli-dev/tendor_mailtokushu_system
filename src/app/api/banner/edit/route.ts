@@ -3,6 +3,7 @@ import { editBannerImage } from '@/lib/gemini'
 import { editBannerImageOpenAI } from '@/lib/openai-image'
 import { IMAGE_MODEL_IDS, DEFAULT_IMAGE_MODEL, imageModelDef } from '@/lib/image-models'
 import { uploadToS3 } from '@/lib/s3'
+import { toWebp } from '@/lib/image-format'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
@@ -37,12 +38,11 @@ export async function POST(request: Request) {
       : await editBannerImage(editParams)
 
     // Upload edited image to S3
-    const ext = result.mimeType === 'image/png' ? 'png' : 'jpg'
-    const buffer = Buffer.from(result.imageData, 'base64')
+    const { buffer, ext, mimeType } = await toWebp(result)
     const { s3Key, s3Url } = await uploadToS3(
       buffer,
       `banner-edited.${ext}`,
-      result.mimeType,
+      mimeType,
       'banner'
     )
 
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
       is_edit: true,
     })
 
-    return NextResponse.json({ s3Url, s3Key, mimeType: result.mimeType })
+    return NextResponse.json({ s3Url, s3Key, mimeType })
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : '画像編集に失敗しました' },
