@@ -16,6 +16,7 @@ import { LogContactDialog } from '@/components/sfa/log-contact-dialog'
 import { QuoteRequestDialog, QuoteUploadDialog, RevisionDialog } from '@/components/sfa/quote-dialogs'
 import { QuoteStatusBadge, StageBadge } from '@/components/sfa/stage-badge'
 import type { Container, DealDetail, Task } from '@/components/sfa/types'
+import { QuoteContent } from '@/components/sfa/quote-content'
 import { useMe, useMembers } from '@/components/sfa/use-members'
 import { addDays, api, DATE_PRESETS, fmtDate, fmtDateTime, selectClass, telHref, todayJst } from '@/components/sfa/utils'
 import { cn } from '@/lib/utils'
@@ -94,6 +95,7 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
   const [logOpen, setLogOpen] = useState(false)
   const [quoteReqOpen, setQuoteReqOpen] = useState(false)
   const [uploadFor, setUploadFor] = useState<number | null>(null)
+  const [directUploadOpen, setDirectUploadOpen] = useState(false)
   const [revisionFor, setRevisionFor] = useState<number | null>(null)
   const [showLegacy, setShowLegacy] = useState(false)
   const [newTask, setNewTask] = useState<{ due_on: string; kind: TaskKind; note: string } | null>(null)
@@ -303,7 +305,10 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">見積</CardTitle>
-              {isOpen && <Button size="xs" onClick={() => setQuoteReqOpen(true)}><Plus className="h-3 w-3" />見積作成を依頼</Button>}
+              <div className="flex gap-1">
+                {canUpload && <Button size="xs" variant="outline" onClick={() => setDirectUploadOpen(true)}><Upload className="h-3 w-3" />見積書を登録</Button>}
+                {isOpen && <Button size="xs" onClick={() => setQuoteReqOpen(true)}><Plus className="h-3 w-3" />見積作成を依頼</Button>}
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
               {deal.quote_requests.length === 0 && <p className="text-sm text-muted-foreground">見積依頼はありません</p>}
@@ -329,6 +334,7 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
                       ))}
                     </ul>
                   )}
+                  {q.files[0] && <QuoteContent file={q.files[0]} canEdit={canUpload} onSaved={load} />}
                   {q.status !== '取消' && (
                     <div className="flex flex-wrap gap-1">
                       {canUpload && <Button size="xs" variant="outline" onClick={() => setUploadFor(q.id)}><Upload className="h-3 w-3" />見積書をアップロード</Button>}
@@ -433,6 +439,7 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
       />
       <QuoteRequestDialog dealId={deal.id} open={quoteReqOpen} onOpenChange={setQuoteReqOpen} onSaved={load} />
       <QuoteUploadDialog quoteRequestId={uploadFor} title={deal.company.name} open={uploadFor !== null} onOpenChange={(o) => { if (!o) setUploadFor(null) }} onSaved={load} />
+      <QuoteUploadDialog quoteRequestId={null} dealId={deal.id} title={deal.company.name} open={directUploadOpen} onOpenChange={setDirectUploadOpen} onSaved={load} />
       <RevisionDialog quoteRequestId={revisionFor} open={revisionFor !== null} onOpenChange={(o) => { if (!o) setRevisionFor(null) }} onSaved={load} />
     </div>
   )

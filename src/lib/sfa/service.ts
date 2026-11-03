@@ -12,6 +12,7 @@ import {
   type ActivityKind, type QuoteStatus, type Stage, type TaskKind, type Temperature,
 } from './constants'
 import { notifyQuoteReady, notifyQuoteRequest, notifyRevisionRequest } from './notify'
+import { parseQuotePdf, type ParsedQuote } from './quote-parse'
 
 export class SfaError extends Error {
   status: number
@@ -183,7 +184,7 @@ export async function getDeal(id: number) {
     db().from('sfa_tasks').select('*, assignee:sfa_members!sfa_tasks_assignee_id_fkey(id, name)').eq('deal_id', id)
       .order('done_at', { ascending: false, nullsFirst: true }).order('due_on'),
     db().from('sfa_deal_containers').select('*').eq('deal_id', id).order('id'),
-    db().from('sfa_quote_requests').select('*, requested_by:sfa_members(id, name), files:sfa_quote_files(*)').eq('deal_id', id)
+    db().from('sfa_quote_requests').select('*, requested_by:sfa_members(id, name), files:sfa_quote_files(*, lines:sfa_quote_lines(*))').eq('deal_id', id)
       .order('requested_at', { ascending: false }),
   ])
   return {
@@ -192,9 +193,10 @@ export async function getDeal(id: number) {
     activities: must(activities, '履歴取得'),
     tasks: must(tasks, 'タスク取得'),
     containers: must(containers, '容器取得'),
-    quote_requests: (must(quotes, '見積取得') as Array<{ files: Array<{ version: number }> }>).map((q) => ({
+    quote_requests: (must(quotes, '見積取得') as Array<{ files: Array<{ version: number; lines?: Array<{ line_no: number }> }> }>).map((q) => ({
       ...q,
-      files: [...(q.files || [])].sort((a, b) => b.version - a.version),
+      files: [...(q.files || [])].sort((a, b) => b.version - a.version)
+        .map((f) => ({ ...f, lines: [...(f.lines || [])].sort((a, b) => a.line_no - b.line_no) })),
     })),
   }
 }
@@ -202,7 +204,10 @@ export async function getDeal(id: number) {
 async function getDealRow(id: number) {
   const row = must(await db().from('sfa_deals').select('*').eq('id', id).eq('tenant_id', await ownerTenantId()).maybeSingle(), '案件取得')
   if (!row) throw new SfaError('案件が見つかりません', 404)
-  return row as { id: number; company_id: number; stage: Stage; owner_id: number | null; answer_due: string | null }
+  return row as {
+    id: number; company_id: number; stage: Stage; owner_id: number | null; answer_due: string | null
+    tossed_by_id: number | null; tossed_by_name: string | null
+  }
 }
 
 async function addActivity(dealId: number, member: SfaMember | null, kind: ActivityKind, body: string,
@@ -375,15 +380,37 @@ export interface DealPatch {
   answer_due?: string | null
   lost_reason?: string | null
   appointment_note?: string | null
+  /** 対応担当を変えるときの引き継ぎメモ（履歴に残す） */
+  handover_note?: string | null
 }
 
 export async function updateDeal(member: SfaMember, id: number, patch: DealPatch, source: 'ui' | 'mcp' = 'ui') {
   const deal = await getDealRow(id)
-  const { stage, ...rest } = patch
+  const { stage, handover_note, ...rest } = patch
+  const ownerChanged = rest.owner_id !== undefined && rest.owner_id !== deal.owner_id
+  // 外部営業から引き継ぐとき、アポ獲得者が空なら元の担当をアポ獲得者として残す
+  if (ownerChanged && deal.owner_id && !deal.tossed_by_id && !deal.tossed_by_name && rest.tossed_by_id === undefined) {
+    const prev = must(await db().from('sfa_members').select('tenant_id').eq('id', deal.owner_id).maybeSingle(), 'メンバー取得') as { tenant_id: string } | null
+    if (prev && !(await isQuoteMaker(prev))) rest.tossed_by_id = deal.owner_id
+  }
   const clean = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined))
   if (Object.keys(clean).length) must(await db().from('sfa_deals').update(clean).eq('id', id), '案件更新')
+  if (ownerChanged) await handOver(deal.id, deal.owner_id, rest.owner_id ?? null, handover_note ?? null, member, source)
   if (stage) await changeStage(deal, stage, member, source)
   return { deal_id: id }
+}
+
+/** 対応担当の引き継ぎ: 履歴に「対応担当 A → B」を残し、未完了の予定を新しい担当に移す */
+async function handOver(dealId: number, fromId: number | null, toId: number | null, note: string | null, member: SfaMember, source: 'ui' | 'mcp') {
+  const ids = [fromId, toId].filter((x): x is number => !!x)
+  const rows = must(await db().from('sfa_members').select('id, name').in('id', ids.length ? ids : [0]), 'メンバー取得') as Array<{ id: number; name: string }>
+  const name = (x: number | null) => rows.find((r) => r.id === x)?.name ?? '未割当'
+  await addActivity(dealId, member, 'ステータス変更', `対応担当 ${name(fromId)} → ${name(toId)}${note?.trim() ? `\n引き継ぎ：${note.trim()}` : ''}`, { source })
+  if (toId) {
+    let q = db().from('sfa_tasks').update({ assignee_id: toId }).eq('deal_id', dealId).is('done_at', null)
+    q = fromId ? q.or(`assignee_id.eq.${fromId},assignee_id.is.null`) : q.is('assignee_id', null)
+    must(await q, '予定の引き継ぎ')
+  }
 }
 
 export async function updateCompany(id: number, patch: Partial<{ name: string; phone: string | null; address: string | null; industry: string | null; website: string | null; bcart_customer_id: string | null; memo: string | null }>) {
@@ -489,7 +516,7 @@ export async function listQuoteQueue(): Promise<QuoteQueueItem[]> {
 
 async function quoteContext(quoteRequestId: number) {
   const row = must(await db().from('sfa_quote_requests')
-    .select('*, deal:sfa_deals!inner(id, stage, owner_id, tenant_id, current_containers_text, company:sfa_companies(name), owner:sfa_members!sfa_deals_owner_id_fkey(id, name, chatwork_account_id, chatwork_room_id))')
+    .select('*, deal:sfa_deals!inner(id, stage, owner_id, tenant_id, current_containers_text, company:sfa_companies(name), owner:sfa_members!sfa_deals_owner_id_fkey(id, name, chatwork_account_id, chatwork_room_id, tenant:tenants(name)))')
     .eq('id', quoteRequestId).eq('deal.tenant_id', await ownerTenantId()).maybeSingle(), '見積依頼取得')
   if (!row) throw new SfaError('見積依頼が見つかりません', 404)
   return row as {
@@ -497,7 +524,7 @@ async function quoteContext(quoteRequestId: number) {
     deal: {
       id: number; stage: Stage; owner_id: number | null; current_containers_text: string | null
       company: { name: string } | null
-      owner: { id: number; name: string; chatwork_account_id: string | null; chatwork_room_id: string | null } | null
+      owner: { id: number; name: string; chatwork_account_id: string | null; chatwork_room_id: string | null; tenant: { name: string } | null } | null
     }
   }
 }
@@ -558,6 +585,8 @@ export async function addQuoteFile(uploader: SfaMember | null, input: {
   note?: string | null
   source: 'ui' | 'mcp' | 'chatwork'
   chatwork_file_id?: string | null
+  /** 照合のために先に読み取った結果（あれば読み直さない） */
+  parsed?: ParsedQuote | null
 }) {
   const ctx = await quoteContext(input.quote_request_id)
   if (input.buffer.length > 20 * 1024 * 1024) throw new SfaError('ファイルが大きすぎます（20MBまで）')
@@ -573,6 +602,7 @@ export async function addQuoteFile(uploader: SfaMember | null, input: {
     size_bytes: input.buffer.length, note: input.note || null, uploaded_by_id: uploader?.id ?? null,
     source: input.source, chatwork_file_id: input.chatwork_file_id || null,
   }).select('id').single(), '見積書登録') as { id: number }
+  const parsed = await readQuoteContent(file.id, input.buffer, ext, input.parsed)
 
   must(await db().from('sfa_quote_requests').update({ status: '作成済' }).eq('id', ctx.id), '見積依頼更新')
   const deal = { id: ctx.deal.id, stage: ctx.deal.stage }
@@ -582,9 +612,137 @@ export async function addQuoteFile(uploader: SfaMember | null, input: {
   if (!openPresent.length) {
     await addTask(deal.id, { due_on: todayJst(), kind: '見積提示', note: `見積書 第${version}版を提示` }, ctx.deal.owner_id, uploader)
   }
-  await addActivity(deal.id, uploader, 'メモ', `見積書 第${version}版を受領（#Q-${ctx.id}・${input.source === 'chatwork' ? 'Chatwork' : input.source === 'mcp' ? 'MCP' : '管理画面'}）${input.note ? `\n${input.note}` : ''}`, { source: 'system' })
-  await notifyQuoteReady(ctx, version).catch((e) => console.error('[sfa] 見積受領の通知に失敗', e))
-  return { quote_file_id: file.id, version, deal_id: deal.id }
+  const content = parsed && parsed.lines.length ? `\n${quoteSummary(parsed.lines, parsed.total_amount)}` : ''
+  await addActivity(deal.id, uploader, 'メモ', `見積書 第${version}版を受領（#Q-${ctx.id}・${input.source === 'chatwork' ? 'Chatwork' : input.source === 'mcp' ? 'MCP' : '管理画面'}）${content}${input.note ? `\n${input.note}` : ''}`, { source: 'system' })
+  await notifyQuoteReady(ctx, version, parsed).catch((e) => console.error('[sfa] 見積受領の通知に失敗', e))
+  return {
+    quote_file_id: file.id, version, deal_id: deal.id,
+    content: parsed ? { status: parsed.status, note: parsed.note, total_amount: parsed.total_amount, lines: parsed.lines.length } : null,
+  }
+}
+
+// =============================================================
+// 見積書の中身（明細）
+// =============================================================
+/** 「KMスクエア 228 本体 白 28円ほか2点 計32,100円」 */
+export function quoteSummary(lines: Array<{ product: string; unit_price: number | null }>, total: number | null): string {
+  if (!lines.length) return ''
+  const [first] = lines
+  const price = first.unit_price !== null ? ` ${Number(first.unit_price).toLocaleString()}円` : ''
+  return `${first.product}${price}${lines.length > 1 ? `ほか${lines.length - 1}点` : ''}${total !== null ? ` 計${Number(total).toLocaleString()}円` : ''}`
+}
+
+/** PDFを読み取って明細を保存する。失敗しても見積書の保存は止めない */
+async function readQuoteContent(fileId: number, buffer: Buffer, ext: string, pre?: ParsedQuote | null): Promise<ParsedQuote | null> {
+  if (ext !== 'pdf') return null
+  try {
+    const parsed = pre ?? await parseQuotePdf(buffer)
+    await saveQuoteContent(fileId, parsed)
+    return parsed
+  } catch (e) {
+    console.error('[sfa] 見積書の読み取りに失敗', e)
+    await db().from('sfa_quote_files').update({ parse_status: 'failed', parse_note: e instanceof Error ? e.message.slice(0, 300) : '読み取りに失敗', parsed_at: new Date().toISOString() }).eq('id', fileId)
+    return null
+  }
+}
+
+async function saveQuoteContent(fileId: number, p: ParsedQuote) {
+  must(await db().from('sfa_quote_files').update({
+    parse_status: p.status, parse_note: p.note, quote_no: p.quote_no, issued_on: p.issued_on, addressee: p.addressee,
+    addressee_person: p.addressee_person, issuer_person: p.issuer_person, total_amount: p.total_amount,
+    valid_note: p.valid_note, remarks: p.remarks, parsed_at: new Date().toISOString(), confirmed_by_id: null, confirmed_at: null,
+  }).eq('id', fileId), '見積内容の保存')
+  must(await db().from('sfa_quote_lines').delete().eq('quote_file_id', fileId), '明細の削除')
+  if (p.lines.length) {
+    must(await db().from('sfa_quote_lines').insert(p.lines.map((l) => ({ quote_file_id: fileId, ...l }))), '明細の保存')
+  }
+}
+
+async function quoteFileRow(fileId: number) {
+  const row = must(await db().from('sfa_quote_files')
+    .select('id, storage_key, file_name, req:sfa_quote_requests!inner(deal_id, deal:sfa_deals!inner(tenant_id))')
+    .eq('id', fileId).eq('req.deal.tenant_id', await ownerTenantId()).maybeSingle(), '見積書取得') as
+    { id: number; storage_key: string; file_name: string; req: { deal_id: number } } | null
+  if (!row) throw new SfaError('見積書が見つかりません', 404)
+  return row
+}
+
+/** 保存済みの見積書を読み取り直す（読み取り機能より前に登録した見積書・書式変更後の再読込） */
+export async function reparseQuoteFile(member: SfaMember, fileId: number) {
+  await assertCanUploadQuote(member)
+  const row = await quoteFileRow(fileId)
+  const res = await fetch(await getPresignedUrl(row.storage_key, 300))
+  if (!res.ok) throw new SfaError(`見積書ファイルを取得できませんでした（${res.status}）`, 500)
+  const ext = (row.file_name.match(/\.([a-zA-Z0-9]{1,5})$/)?.[1] || 'pdf').toLowerCase()
+  const parsed = await readQuoteContent(fileId, Buffer.from(await res.arrayBuffer()), ext)
+  if (!parsed) throw new SfaError('PDF以外の見積書は読み取れません')
+  return { quote_file_id: fileId, status: parsed.status, note: parsed.note, lines: parsed.lines.length }
+}
+
+export interface QuoteContentInput {
+  total_amount?: number | null
+  valid_note?: string | null
+  remarks?: string | null
+  lines: Array<{ code?: string | null; product: string; qty?: number | null; unit_price?: number | null; amount?: number | null }>
+}
+
+/** 人が明細を直して確定する */
+export async function confirmQuoteContent(member: SfaMember, fileId: number, input: QuoteContentInput) {
+  await assertCanUploadQuote(member)
+  await quoteFileRow(fileId)
+  const lines = input.lines.filter((l) => l.product.trim()).map((l, i) => {
+    const qty = l.qty ?? null, unit = l.unit_price ?? null
+    const amount = l.amount ?? (qty !== null && unit !== null ? Math.round(qty * unit) : null)
+    return {
+      quote_file_id: fileId, line_no: i + 1, code: l.code || null, product: l.product.trim(), qty, unit_price: unit, amount,
+      check_ok: qty !== null && unit !== null && amount !== null && Math.abs(Math.round(qty * unit) - amount) <= 1,
+    }
+  })
+  const total = input.total_amount !== undefined ? input.total_amount : lines.reduce((s, l) => s + (l.amount ?? 0), 0)
+  must(await db().from('sfa_quote_lines').delete().eq('quote_file_id', fileId), '明細の削除')
+  if (lines.length) must(await db().from('sfa_quote_lines').insert(lines), '明細の保存')
+  must(await db().from('sfa_quote_files').update({
+    parse_status: 'confirmed', parse_note: null, total_amount: total,
+    ...(input.valid_note !== undefined ? { valid_note: input.valid_note } : {}),
+    ...(input.remarks !== undefined ? { remarks: input.remarks } : {}),
+    confirmed_by_id: member.id, confirmed_at: new Date().toISOString(),
+  }).eq('id', fileId), '見積内容の確定')
+  return { quote_file_id: fileId, lines: lines.length, total_amount: total }
+}
+
+/** 過去に提示した見積明細の検索（品名・型番の部分一致） */
+export async function searchQuoteLines(q: string, limit = 50) {
+  const word = q.trim().replace(/[,()%]/g, ' ')
+  if (!word) throw new SfaError('検索語を入力してください')
+  const rows = must(await db().from('sfa_quote_lines')
+    .select('product, qty, unit_price, amount, file:sfa_quote_files!inner(id, version, quote_no, issued_on, uploaded_at, req:sfa_quote_requests!inner(id, status, deal:sfa_deals!inner(id, stage, tenant_id, company:sfa_companies(name))))')
+    .ilike('product', `%${word}%`).eq('file.req.deal.tenant_id', await ownerTenantId())
+    .order('id', { ascending: false }).limit(limit), '見積明細の検索') as Array<{
+      product: string; qty: number | null; unit_price: number | null; amount: number | null
+      file: { id: number; version: number; quote_no: string | null; issued_on: string | null; uploaded_at: string
+        req: { id: number; status: QuoteStatus; deal: { id: number; stage: Stage; company: { name: string } | null } } }
+    }>
+  return rows.map((r) => ({
+    company_name: r.file.req.deal.company?.name ?? '', deal_id: r.file.req.deal.id, stage: r.file.req.deal.stage,
+    quote_request_id: r.file.req.id, quote_status: r.file.req.status, version: r.file.version, quote_no: r.file.quote_no,
+    issued_on: r.file.issued_on ?? r.file.uploaded_at.slice(0, 10), product: r.product, qty: r.qty, unit_price: r.unit_price, amount: r.amount,
+  }))
+}
+
+/** 案件ごとの最新見積（明細の要約）。朝の通知用 */
+export async function latestQuoteSummaries(dealIds: number[]): Promise<Map<number, string>> {
+  const out = new Map<number, string>()
+  if (!dealIds.length) return out
+  const rows = must(await db().from('sfa_quote_files')
+    .select('version, uploaded_at, total_amount, lines:sfa_quote_lines(line_no, product, unit_price), req:sfa_quote_requests!inner(deal_id, status)')
+    .in('req.deal_id', dealIds).neq('req.status', '取消').order('uploaded_at', { ascending: false }), '最新見積の取得') as Array<{
+      version: number; total_amount: number | null; lines: Array<{ line_no: number; product: string; unit_price: number | null }>; req: { deal_id: number }
+    }>
+  for (const r of rows) {
+    if (out.has(r.req.deal_id) || !r.lines.length) continue
+    out.set(r.req.deal_id, quoteSummary([...r.lines].sort((a, b) => a.line_no - b.line_no), r.total_amount))
+  }
+  return out
 }
 
 /** 見積書のダウンロードURL（署名付き・10分） */

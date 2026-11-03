@@ -16,9 +16,9 @@ async function postForm(url: string, form: FormData) {
   return data
 }
 
-/** 見積書のアップロード（テンドール用） */
-export function QuoteUploadDialog({ quoteRequestId, title, open, onOpenChange, onSaved }: {
-  quoteRequestId: number | null; title?: string; open: boolean; onOpenChange: (o: boolean) => void; onSaved?: () => void
+/** 見積書のアップロード（テンドール・管理者用）。dealId を渡すと見積依頼なしで案件に直接登録する */
+export function QuoteUploadDialog({ quoteRequestId, dealId, title, open, onOpenChange, onSaved }: {
+  quoteRequestId: number | null; dealId?: number; title?: string; open: boolean; onOpenChange: (o: boolean) => void; onSaved?: () => void
 }) {
   const [file, setFile] = useState<File | null>(null)
   const [note, setNote] = useState('')
@@ -26,13 +26,14 @@ export function QuoteUploadDialog({ quoteRequestId, title, open, onOpenChange, o
   useEffect(() => { if (open) { setFile(null); setNote('') } }, [open])
 
   async function save() {
-    if (!quoteRequestId || !file) { toast.error('ファイルを選択してください'); return }
+    if ((!quoteRequestId && !dealId) || !file) { toast.error('ファイルを選択してください'); return }
     setSaving(true)
     try {
       const form = new FormData()
       form.append('file', file)
       if (note.trim()) form.append('note', note.trim())
-      const r = (await postForm(`/api/sfa/quote-requests/${quoteRequestId}/files`, form)) as { version: number }
+      const url = quoteRequestId ? `/api/sfa/quote-requests/${quoteRequestId}/files` : `/api/sfa/deals/${dealId}/quote-files`
+      const r = (await postForm(url, form)) as { version: number }
       toast.success(`見積書 第${r.version}版を登録しました`)
       onOpenChange(false)
       onSaved?.()
@@ -48,7 +49,10 @@ export function QuoteUploadDialog({ quoteRequestId, title, open, onOpenChange, o
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>見積書をアップロード</DialogTitle>
-          <DialogDescription>{title}{quoteRequestId ? `（#Q-${quoteRequestId}）` : ''}。版は自動で採番され、対応担当に通知されます。</DialogDescription>
+          <DialogDescription>
+            {title}{quoteRequestId ? `（#Q-${quoteRequestId}）` : ''}。
+            {quoteRequestId ? '版は自動で採番され、' : '依頼中の見積があればその次の版として、無ければ新しい見積として登録され、'}対応担当に通知されます。
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <Input type="file" accept=".pdf,.xlsx,.xls,.docx,.doc" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />

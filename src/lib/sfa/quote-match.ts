@@ -93,7 +93,7 @@ function nameScore(text: string, company: string): { score: number; full: boolea
 }
 
 /** 純粋な判定関数（DBアクセスなし）。テストしやすいよう候補を引数で受ける */
-export function decide(input: { fileName: string; body: string }, candidates: Candidate[]): Decision {
+export function decide(input: { fileName: string; body: string; addressee?: string | null }, candidates: Candidate[]): Decision {
   const text = `${input.fileName}\n${input.body}`
   const qNo = text.match(/#?Q-(\d{1,7})/i)?.[1]
   const rpTo = input.body.match(/\[rp aid=\d+ to=\d+-(\d+)\]/)?.[1]
@@ -102,7 +102,10 @@ export function decide(input: { fileName: string; body: string }, candidates: Ca
   const scored = candidates.map((c) => {
     if (qNo && Number(qNo) === c.quote_request_id) { full.add(c.quote_request_id); return { ...c, score: 1, reason: `依頼番号 #Q-${qNo} が一致` } }
     if (rpTo && c.chatwork_message_id === rpTo) { full.add(c.quote_request_id); return { ...c, score: 0.98, reason: '依頼メッセージへの返信' } }
-    const byFile = nameScore(input.fileName, c.company_name)
+    // 見積書の宛名（PDFの「○○ 御中」）はファイル名と同じ強さで扱う
+    const byAddr = input.addressee ? nameScore(input.addressee, c.company_name) : { score: 0, full: false }
+    const fileFirst = nameScore(input.fileName, c.company_name)
+    const byFile = byAddr.score > fileFirst.score ? byAddr : fileFirst
     const byBody = nameScore(input.body, c.company_name)
     const best = byFile.score >= byBody.score * 0.95 ? byFile : { score: byBody.score * 0.95, full: byBody.full }
     let s = best.score
