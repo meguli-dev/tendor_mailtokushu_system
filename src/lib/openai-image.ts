@@ -4,6 +4,8 @@
  */
 import type { BannerTonmanaParams } from './gemini'
 import { buildBannerPrompt } from './gemini'
+import { DEFAULT_IMAGE_MODEL, OPENAI_IMAGE_QUALITY } from './image-models'
+import { BANNER_OUTPUT_FORMAT, BANNER_WEBP_QUALITY } from './image-format'
 
 const OPENAI_API = 'https://api.openai.com/v1'
 
@@ -26,7 +28,24 @@ function extractB64(json: unknown): { imageData: string; mimeType: string } {
   const data = (json as { data?: Array<{ b64_json?: string }> })?.data
   const b64 = data?.[0]?.b64_json
   if (!b64) throw new Error('OpenAIから画像が生成されませんでした。プロンプトを調整して再試行してください。')
-  return { imageData: b64, mimeType: 'image/png' }
+  return { imageData: b64, mimeType: `image/${BANNER_OUTPUT_FORMAT}` }
+}
+
+/** 品質と出力形式（WebP）。generations はJSON、edits はFormDataで渡す */
+const OUTPUT_OPTS = {
+  quality: OPENAI_IMAGE_QUALITY,
+  output_format: BANNER_OUTPUT_FORMAT,
+  output_compression: BANNER_WEBP_QUALITY,
+}
+
+function appendOutputOpts(form: FormData) {
+  for (const [k, v] of Object.entries(OUTPUT_OPTS)) form.append(k, String(v))
+}
+
+function extOf(blob: Blob): string {
+  if (blob.type.includes('webp')) return 'webp'
+  if (blob.type.includes('jpeg') || blob.type.includes('jpg')) return 'jpg'
+  return 'png'
 }
 
 async function openaiJson(path: string, body: FormData | string): Promise<unknown> {
@@ -56,7 +75,7 @@ export async function generateBannerImageOpenAI(params: {
   imageModel?: string
   tonmana?: BannerTonmanaParams | null
 }): Promise<{ imageData: string; mimeType: string }> {
-  const model = params.imageModel || 'gpt-image-2'
+  const model = params.imageModel || DEFAULT_IMAGE_MODEL
   const size = snapSize(params.width, params.height)
   let prompt = buildBannerPrompt(params)
 
@@ -73,7 +92,7 @@ export async function generateBannerImageOpenAI(params: {
   }
 
   if (inputUrls.length === 0) {
-    const json = await openaiJson('/images/generations', JSON.stringify({ model, prompt, size, n: 1 }))
+    const json = await openaiJson('/images/generations', JSON.stringify({ model, prompt, size, n: 1, ...OUTPUT_OPTS }))
     return extractB64(json)
   }
 
@@ -82,17 +101,19 @@ export async function generateBannerImageOpenAI(params: {
   form.append('model', model)
   form.append('prompt', prompt)
   form.append('size', size)
+  appendOutputOpts(form)
   let ok = 0
   for (const [i, u] of inputUrls.entries()) {
     try {
-      form.append('image[]', await fetchImageAsBlob(u.url), `input-${i + 1}.png`)
+      const blob = await fetchImageAsBlob(u.url)
+      form.append('image[]', blob, `input-${i + 1}.${extOf(blob)}`)
       ok++
     } catch {
       // 取得できない入力画像はスキップ（プロンプト記述とズレるが生成は継続）
     }
   }
   if (ok === 0) {
-    const json = await openaiJson('/images/generations', JSON.stringify({ model, prompt, size, n: 1 }))
+    const json = await openaiJson('/images/generations', JSON.stringify({ model, prompt, size, n: 1, ...OUTPUT_OPTS }))
     return extractB64(json)
   }
   return extractB64(await openaiJson('/images/edits', form))
@@ -105,9 +126,10 @@ export async function editBannerImageOpenAI(params: {
   width?: number
   height?: number
 }): Promise<{ imageData: string; mimeType: string }> {
-  const model = params.imageModel || 'gpt-image-2'
+  const model = params.imageModel || DEFAULT_IMAGE_MODEL
   const form = new FormData()
   form.append('model', model)
+  appendOutputOpts(form)
   if (params.width && params.height) {
     form.append('size', snapSize(params.width, params.height))
   }
@@ -119,6 +141,7 @@ ${params.editInstruction}
 【重要】
 - 元画像の構図やスタイルは維持すること
 - 指示された箇所以外は変更しないこと`)
-  form.append('image[]', await fetchImageAsBlob(params.baseImageUrl), 'base.png')
+  const base = await fetchImageAsBlob(params.baseImageUrl)
+  form.append('image[]', base, `base.${extOf(base)}`)
   return extractB64(await openaiJson('/images/edits', form))
 }

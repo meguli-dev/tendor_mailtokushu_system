@@ -14,6 +14,7 @@ import { Separator } from '@/components/ui/separator'
 import { ProductInput, type ProductData } from './product-input'
 import { useNewsletterTemplates } from '@/hooks/use-templates'
 import { useCreateNewsletter, useUpdateNewsletter } from '@/hooks/use-newsletters'
+import { CreateCampaignButton } from '@/components/mail/create-campaign-button'
 import { CopyButton } from '@/components/shared/copy-button'
 import { BannerGenerateDialog } from './banner-generate-dialog'
 import { toast } from 'sonner'
@@ -1541,6 +1542,7 @@ export function NewsletterForm({ newsletter }: NewsletterFormProps) {
                 <ImageIcon className="mr-1 h-4 w-4" />
                 バナー生成
               </Button>
+              <CreateCampaignButton newsletterId={newsletterId} html={generatedHtml} subject={subject || title} />
             </div>
           </div>
 
