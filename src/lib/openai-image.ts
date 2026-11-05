@@ -5,7 +5,7 @@
 import type { BannerTonmanaParams } from './gemini'
 import { buildBannerPrompt } from './gemini'
 import { DEFAULT_IMAGE_MODEL, OPENAI_IMAGE_QUALITY } from './image-models'
-import { BANNER_OUTPUT_FORMAT, BANNER_WEBP_QUALITY } from './image-format'
+import { BANNER_JPEG_QUALITY, BANNER_OUTPUT_FORMAT } from './image-format'
 
 const OPENAI_API = 'https://api.openai.com/v1'
 
@@ -15,6 +15,23 @@ function snapSize(width: number, height: number): string {
   if (ratio > 1.2) return '1536x1024'
   if (ratio < 0.8) return '1024x1536'
   return '1024x1024'
+}
+
+/**
+ * 生成後に選んだサイズへ中央で切り抜くので、切れる側の端に文字・商品を置かないよう指示する
+ *   例: 1200x628 を 1536x1024 で生成 → 上下それぞれ約2割を切り落とす
+ */
+function cropNote(size: string, width: number, height: number): string {
+  const [sw, sh] = size.split('x').map(Number)
+  const target = width / height
+  const gen = sw / sh
+  if (Math.abs(target - gen) / gen < 0.03) return ''
+  if (target > gen) {
+    const cut = Math.round(((1 - gen / target) / 2) * 100)
+    return `\n\n【レイアウトの注意】完成後に上下をそれぞれ約${cut}%切り落として横長（${width}x${height}）にします。文字・ロゴ・商品はすべて縦方向の中央${100 - cut * 2}%の範囲に収め、上下の端には背景だけを置いてください。`
+  }
+  const cut = Math.round(((1 - target / gen) / 2) * 100)
+  return `\n\n【レイアウトの注意】完成後に左右をそれぞれ約${cut}%切り落として${width}x${height}にします。文字・ロゴ・商品はすべて横方向の中央${100 - cut * 2}%の範囲に収め、左右の端には背景だけを置いてください。`
 }
 
 async function fetchImageAsBlob(url: string): Promise<Blob> {
@@ -31,11 +48,11 @@ function extractB64(json: unknown): { imageData: string; mimeType: string } {
   return { imageData: b64, mimeType: `image/${BANNER_OUTPUT_FORMAT}` }
 }
 
-/** 品質と出力形式（WebP）。generations はJSON、edits はFormDataで渡す */
+/** 品質と出力形式（JPEG）。generations はJSON、edits はFormDataで渡す */
 const OUTPUT_OPTS = {
   quality: OPENAI_IMAGE_QUALITY,
   output_format: BANNER_OUTPUT_FORMAT,
-  output_compression: BANNER_WEBP_QUALITY,
+  output_compression: BANNER_JPEG_QUALITY,
 }
 
 function appendOutputOpts(form: FormData) {
@@ -77,7 +94,7 @@ export async function generateBannerImageOpenAI(params: {
 }): Promise<{ imageData: string; mimeType: string }> {
   const model = params.imageModel || DEFAULT_IMAGE_MODEL
   const size = snapSize(params.width, params.height)
-  let prompt = buildBannerPrompt(params)
+  let prompt = buildBannerPrompt(params) + cropNote(size, params.width, params.height)
 
   // 入力画像（商品画像・参考画像）がある場合は edits エンドポイントで合成
   const inputUrls: Array<{ url: string; note: string }> = []
@@ -130,8 +147,11 @@ export async function editBannerImageOpenAI(params: {
   const form = new FormData()
   form.append('model', model)
   appendOutputOpts(form)
+  let note = ''
   if (params.width && params.height) {
-    form.append('size', snapSize(params.width, params.height))
+    const size = snapSize(params.width, params.height)
+    form.append('size', size)
+    note = cropNote(size, params.width, params.height)
   }
   form.append('prompt', `以下の画像を編集してください。元の画像のデザイン・レイアウト・色合いを忠実に保持したまま、指定された修正点のみを変更してください。
 
@@ -140,7 +160,7 @@ ${params.editInstruction}
 
 【重要】
 - 元画像の構図やスタイルは維持すること
-- 指示された箇所以外は変更しないこと`)
+- 指示された箇所以外は変更しないこと${note}`)
   const base = await fetchImageAsBlob(params.baseImageUrl)
   form.append('image[]', base, `base.${extOf(base)}`)
   return extractB64(await openaiJson('/images/edits', form))

@@ -1,9 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
-import { editBannerImage } from '@/lib/gemini'
 import { editBannerImageOpenAI } from '@/lib/openai-image'
 import { IMAGE_MODEL_IDS, DEFAULT_IMAGE_MODEL, imageModelDef } from '@/lib/image-models'
 import { uploadToS3 } from '@/lib/s3'
-import { toWebp } from '@/lib/image-format'
+import { imageSizeOf, toBannerFile } from '@/lib/image-format'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
@@ -28,17 +27,18 @@ export async function POST(request: Request) {
     }
 
     const modelDef = imageModelDef(parsed.data.image_model)
+    // 修正後も元画像と同じサイズにする（gpt-imageは決まったサイズでしか出さないため、元のサイズに縮小し直す）
+    const baseSize = await imageSizeOf(parsed.data.base_image_url)
     const editParams = {
       baseImageUrl: parsed.data.base_image_url,
       editInstruction: parsed.data.edit_instruction,
-      imageModel: parsed.data.image_model,
+      imageModel: modelDef.id,
+      ...(baseSize ?? {}),
     }
-    const result = modelDef.provider === 'openai'
-      ? await editBannerImageOpenAI(editParams)
-      : await editBannerImage(editParams)
+    const result = await editBannerImageOpenAI(editParams)
 
-    // Upload edited image to S3
-    const { buffer, ext, mimeType } = await toWebp(result)
+    // Upload edited image to S3（元画像のサイズに縮小・切り抜いてJPEGで保存）
+    const { buffer, ext, mimeType } = await toBannerFile(result, baseSize)
     const { s3Key, s3Url } = await uploadToS3(
       buffer,
       `banner-edited.${ext}`,

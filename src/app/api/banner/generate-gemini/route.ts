@@ -1,10 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
-import { generateBannerImage, editBannerImage } from '@/lib/gemini'
 import { generateBannerImageOpenAI, editBannerImageOpenAI } from '@/lib/openai-image'
 import { imageModelDef } from '@/lib/image-models'
 import { bannerGenerateSchema } from '@/lib/validators'
 import { uploadToS3 } from '@/lib/s3'
-import { toWebp } from '@/lib/image-format'
+import { toBannerFile } from '@/lib/image-format'
 import { NextResponse } from 'next/server'
 
 const MONTHLY_LIMIT = 60
@@ -62,16 +61,14 @@ export async function POST(request: Request) {
       productImages: parsed.data.product_images,
       referenceImageUrl: parsed.data.reference_image_url,
       pageContext: parsed.data.page_context,
-      imageModel: parsed.data.image_model,
+      imageModel: modelDef.id,
       tonmana: tonmana || null,
     }
 
-    const result = modelDef.provider === 'openai'
-      ? await generateBannerImageOpenAI(genParams)
-      : await generateBannerImage(genParams)
+    const result = await generateBannerImageOpenAI(genParams)
 
-    // Upload generated image to S3（WebPに変換して容量を抑える）
-    const { buffer, ext, mimeType } = await toWebp(result)
+    // Upload generated image to S3（選んだサイズに縮小・切り抜いてJPEGで保存）
+    const { buffer, ext, mimeType } = await toBannerFile(result, { width: parsed.data.width, height: parsed.data.height })
     const { s3Key, s3Url } = await uploadToS3(
       buffer,
       `banner-generated.${ext}`,
@@ -110,15 +107,13 @@ export async function POST(request: Request) {
       const remakeParams = {
         baseImageUrl: s3Url,
         editInstruction: remakeInstruction,
-        imageModel: parsed.data.image_model,
+        imageModel: modelDef.id,
         width: w2,
         height: h2,
       }
-      const result2 = modelDef.provider === 'openai'
-        ? await editBannerImageOpenAI(remakeParams)
-        : await editBannerImage(remakeParams)
+      const result2 = await editBannerImageOpenAI(remakeParams)
 
-      const { buffer: buffer2, ext: ext2, mimeType: mimeType2 } = await toWebp(result2)
+      const { buffer: buffer2, ext: ext2, mimeType: mimeType2 } = await toBannerFile(result2, { width: w2, height: h2 })
       const up2 = await uploadToS3(buffer2, `banner-generated-2nd.${ext2}`, mimeType2, 'banner')
       secondS3Url = up2.s3Url
 
